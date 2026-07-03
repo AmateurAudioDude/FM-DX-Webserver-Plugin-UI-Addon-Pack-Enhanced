@@ -114,7 +114,7 @@ const UIAPE_ADMIN_ONLY_CONTROL_KEYS = new Set([
   "IS_VISUALEQ_PLUGIN_ENALBED"
 ]);
 
-async function uiapFetchServerConfig() {
+async function uiapeFetchServerConfig() {
   try {
     const response = await fetch(UIAPE_SERVER_CONFIG_ENDPOINT, {
       method: "GET",
@@ -128,14 +128,17 @@ async function uiapFetchServerConfig() {
     const payload = await response.json();
     const config = payload && payload.config;
 
-    return config && typeof config === "object" && !Array.isArray(config) ? config : {};
+    return {
+      config: config && typeof config === "object" && !Array.isArray(config) ? config : {},
+      isAdmin: payload?.isAdmin === true
+    };
   } catch (error) {
     console.warn(`[${pluginName}] Could not load server config. Falling back to bundled defaults.`, error);
-    return {};
+    return { config: {}, isAdmin: false };
   }
 }
 
-function uiapSaveServerConfig(config) {
+function uiapeSaveServerConfig(config) {
   try {
     const payload = JSON.stringify({ config });
 
@@ -167,7 +170,9 @@ function uiapSaveServerConfig(config) {
   }
 }
 
-const UIAPE_SERVER_CONFIG = await uiapFetchServerConfig();
+const UIAPE_SERVER_RESPONSE = await uiapeFetchServerConfig();
+const UIAPE_SERVER_CONFIG = UIAPE_SERVER_RESPONSE.config || {};
+const UIAPE_IS_ADMIN = UIAPE_SERVER_RESPONSE.isAdmin === true;
 
 // Server/shared profile. The server bridge stores it in plugins_configs/UIAddonPackEnhanced.json.
 // Admin saves go to the server profile. Regular users get this profile as their default base
@@ -178,7 +183,7 @@ const UIAPE_BUNDLED_SITE_CONFIG = {
 
 const UIAPE_SITE_CONFIG = { ...UIAPE_BUNDLED_SITE_CONFIG, ...UIAPE_SERVER_CONFIG };
 
-function uiapReadBootstrapConfig(key) {
+function uiapeReadBootstrapConfig(key) {
   try {
     const raw = localStorage.getItem(key);
     if (!raw) return {};
@@ -190,7 +195,7 @@ function uiapReadBootstrapConfig(key) {
 }
 
 const UIAPE_BOOT_SITE_CONFIG = { ...UIAPE_SITE_CONFIG };
-const UIAPE_BOOT_USER_CONFIG = uiapReadBootstrapConfig(UIAPE_USER_CONFIG_KEY);
+const UIAPE_BOOT_USER_CONFIG = uiapeReadBootstrapConfig(UIAPE_USER_CONFIG_KEY);
 const UIAPE_BOOT_USER_ENABLE_VALUE = localStorage.getItem(UIAPE_ENABLE_KEY);
 const UIAPE_BOOT_SITE_ENABLE_VALUE = UIAPE_BOOT_SITE_CONFIG.ENABLE_PLUGIN === undefined
   ? ENABLE_PLUGIN_DEFAULT
@@ -404,45 +409,45 @@ const UIAPE_DEFAULT_CONFIG = {
   HIDE_CONSOLE_LOGS: false
 };
 
-function uiapIsPlainObject(value) {
+function uiapeIsPlainObject(value) {
   return value && typeof value === "object" && !Array.isArray(value);
 }
 
-function uiapMergeRdsPresets(presets) {
-  const incoming = uiapIsPlainObject(presets) ? presets : {};
+function uiapeMergeRdsPresets(presets) {
+  const incoming = uiapeIsPlainObject(presets) ? presets : {};
   const merged = {};
   ["user", "1", "2", "3"].forEach(id => {
     const base = UIAPE_DEFAULT_CONFIG.RDS_ICON_STYLE_PRESETS[id] || UIAPE_DEFAULT_CONFIG.RDS_ICON_STYLE_PRESETS[Number(id)] || {};
     const value = incoming[id] || incoming[Number(id)] || {};
-    merged[id] = { ...base, ...(uiapIsPlainObject(value) ? value : {}) };
+    merged[id] = { ...base, ...(uiapeIsPlainObject(value) ? value : {}) };
   });
   return merged;
 }
 
-function uiapNormalizePluginMap(map, fallback = {}) {
+function uiapeNormalizePluginMap(map, fallback = {}) {
   return {
-    ...(uiapIsPlainObject(fallback) ? fallback : {}),
-    ...(uiapIsPlainObject(map) ? map : {})
+    ...(uiapeIsPlainObject(fallback) ? fallback : {}),
+    ...(uiapeIsPlainObject(map) ? map : {})
   };
 }
 
-function uiapNormalizeConfig(config) {
-  const input = uiapIsPlainObject(config) ? config : {};
+function uiapeNormalizeConfig(config) {
+  const input = uiapeIsPlainObject(config) ? config : {};
   const merged = {
     ...UIAPE_DEFAULT_CONFIG,
     ...input
   };
 
-  merged.RDS_ICON_STYLE_PRESETS = uiapMergeRdsPresets(input.RDS_ICON_STYLE_PRESETS || merged.RDS_ICON_STYLE_PRESETS);
-  merged.PLUGIN_BUTTON_DEFAULT_LABELS = uiapNormalizePluginMap(input.PLUGIN_BUTTON_DEFAULT_LABELS, UIAPE_DEFAULT_CONFIG.PLUGIN_BUTTON_DEFAULT_LABELS);
-  merged.PLUGIN_BUTTON_DEFAULT_MAP = uiapNormalizePluginMap(input.PLUGIN_BUTTON_DEFAULT_MAP, UIAPE_DEFAULT_CONFIG.PLUGIN_BUTTON_DEFAULT_MAP);
-  merged.PLUGIN_BUTTON_CUSTOM_LABELS = uiapNormalizePluginMap(input.PLUGIN_BUTTON_CUSTOM_LABELS, UIAPE_DEFAULT_CONFIG.PLUGIN_BUTTON_CUSTOM_LABELS);
-  merged.PLUGIN_BUTTON_CUSTOM_MAP = uiapNormalizePluginMap(input.PLUGIN_BUTTON_CUSTOM_MAP, UIAPE_DEFAULT_CONFIG.PLUGIN_BUTTON_CUSTOM_MAP);
+  merged.RDS_ICON_STYLE_PRESETS = uiapeMergeRdsPresets(input.RDS_ICON_STYLE_PRESETS || merged.RDS_ICON_STYLE_PRESETS);
+  merged.PLUGIN_BUTTON_DEFAULT_LABELS = uiapeNormalizePluginMap(input.PLUGIN_BUTTON_DEFAULT_LABELS, UIAPE_DEFAULT_CONFIG.PLUGIN_BUTTON_DEFAULT_LABELS);
+  merged.PLUGIN_BUTTON_DEFAULT_MAP = uiapeNormalizePluginMap(input.PLUGIN_BUTTON_DEFAULT_MAP, UIAPE_DEFAULT_CONFIG.PLUGIN_BUTTON_DEFAULT_MAP);
+  merged.PLUGIN_BUTTON_CUSTOM_LABELS = uiapeNormalizePluginMap(input.PLUGIN_BUTTON_CUSTOM_LABELS, UIAPE_DEFAULT_CONFIG.PLUGIN_BUTTON_CUSTOM_LABELS);
+  merged.PLUGIN_BUTTON_CUSTOM_MAP = uiapeNormalizePluginMap(input.PLUGIN_BUTTON_CUSTOM_MAP, UIAPE_DEFAULT_CONFIG.PLUGIN_BUTTON_CUSTOM_MAP);
 
   return merged;
 }
 
-function uiapReadJsonConfig(key) {
+function uiapeReadJsonConfig(key) {
   try {
     const raw = localStorage.getItem(key);
     if (!raw) return {};
@@ -454,11 +459,10 @@ function uiapReadJsonConfig(key) {
   }
 }
 
-function uiapDetectAdminSession() {
-  const bodyText = document.body ? (document.body.textContent || document.body.innerText || "") : "";
-  return bodyText.includes("You are logged in as an administrator.")
-    || bodyText.includes("You are logged in as an adminstrator.")
-    || bodyText.includes("You are logged in and can control the receiver.");
+function uiapeDetectAdminSession() {
+  // Security note: this must not rely on DOM text, because users can inject text locally.
+  // The value comes from UIAddonPackEnhanced_server.js, which checks the server-side session.
+  return UIAPE_IS_ADMIN === true;
 }
 
 function readUiapAdminConfig() {
@@ -468,14 +472,14 @@ function readUiapAdminConfig() {
 }
 
 function readUiapUserConfig() {
-  return uiapReadJsonConfig(UIAPE_USER_CONFIG_KEY);
+  return uiapeReadJsonConfig(UIAPE_USER_CONFIG_KEY);
 }
 
 function readUiapStoredConfig() {
   const adminConfig = readUiapAdminConfig();
 
   // Admin always edits/sees the shared server profile.
-  if (uiapDetectAdminSession()) return adminConfig;
+  if (uiapeDetectAdminSession()) return adminConfig;
 
   // Regular users always start from the server profile and may keep browser-local overrides.
   return {
@@ -484,17 +488,17 @@ function readUiapStoredConfig() {
   };
 }
 
-function uiapJsonEqual(a, b) {
+function uiapeJsonEqual(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
-function uiapBuildUserOverrides(fullConfig) {
-  const normalizedFullConfig = uiapNormalizeConfig(fullConfig);
-  const base = uiapNormalizeConfig(readUiapAdminConfig());
+function uiapeBuildUserOverrides(fullConfig) {
+  const normalizedFullConfig = uiapeNormalizeConfig(fullConfig);
+  const base = uiapeNormalizeConfig(readUiapAdminConfig());
   const overrides = {};
 
   Object.keys(normalizedFullConfig || {}).forEach(key => {
-    if (!uiapJsonEqual(normalizedFullConfig[key], base[key])) {
+    if (!uiapeJsonEqual(normalizedFullConfig[key], base[key])) {
       overrides[key] = normalizedFullConfig[key];
     }
   });
@@ -503,20 +507,20 @@ function uiapBuildUserOverrides(fullConfig) {
 }
 
 function writeUiapStoredConfig(config, profile) {
-  const targetProfile = profile || (uiapDetectAdminSession() ? "admin" : "user");
-  const normalizedConfig = uiapNormalizeConfig(config);
+  const targetProfile = profile || (uiapeDetectAdminSession() ? "admin" : "user");
+  const normalizedConfig = uiapeNormalizeConfig(config);
 
   if (targetProfile === "user") {
-    const overrides = uiapBuildUserOverrides(normalizedConfig);
+    const overrides = uiapeBuildUserOverrides(normalizedConfig);
     localStorage.setItem(UIAPE_USER_CONFIG_KEY, JSON.stringify(overrides, null, 2));
     localStorage.setItem(UIAPE_CONFIG_KEY, JSON.stringify(overrides, null, 2));
     return;
   }
 
   // Admin/default profile is shared server-side. Keep a local copy only for immediate UI refresh,
-  // but the real shared source is plugins_configs/UIAddonPack.json written by the server bridge.
+  // but the real shared source is plugins_configs/UIAddonPackEnhanced.json written by the server bridge.
   localStorage.setItem(UIAPE_CONFIG_KEY, JSON.stringify(normalizedConfig, null, 2));
-  uiapSaveServerConfig(normalizedConfig).then(result => {
+  uiapeSaveServerConfig(normalizedConfig).then(result => {
     if (!result || result.ok !== true) {
       console.warn(`[${pluginName}] Admin config was not confirmed by the server. Check UIAddonPackEnhanced_server.js and file permissions.`);
     }
@@ -528,47 +532,47 @@ function ensureUiapDefaultConfig() {
 }
 
 function getUiapConfig() {
-  return uiapNormalizeConfig(readUiapStoredConfig());
+  return uiapeNormalizeConfig(readUiapStoredConfig());
 }
 
 let UIAPE_CONFIG = getUiapConfig();
 let UIAPE_CONFIG_DIRTY = false;
 
 function getUiapPanelConfig() {
-  return uiapNormalizeConfig(UIAPE_CONFIG);
+  return uiapeNormalizeConfig(UIAPE_CONFIG);
 }
 
 function markUiapConfigDirty() {
   UIAPE_CONFIG_DIRTY = true;
-  const panel = document.getElementById("uiap-config-panel");
+  const panel = document.getElementById("uiape-config-panel");
   if (!panel) return;
-  panel.classList.add("uiap-config-dirty");
-  const status = panel.querySelector("[data-uiap-save-status]");
+  panel.classList.add("uiape-config-dirty");
+  const status = panel.querySelector("[data-uiape-save-status]");
   if (status) status.textContent = "Unsaved changes";
 }
 
 function markUiapConfigClean(message = "Saved") {
   UIAPE_CONFIG_DIRTY = false;
-  const panel = document.getElementById("uiap-config-panel");
+  const panel = document.getElementById("uiape-config-panel");
   if (!panel) return;
-  panel.classList.remove("uiap-config-dirty");
-  const status = panel.querySelector("[data-uiap-save-status]");
+  panel.classList.remove("uiape-config-dirty");
+  const status = panel.querySelector("[data-uiape-save-status]");
   if (status) status.textContent = message;
 }
 
 async function saveUiapConfigAndReload() {
-  const targetProfile = uiapDetectAdminSession() ? "admin" : "user";
-  const normalizedConfig = uiapNormalizeConfig(getUiapPanelConfig());
+  const targetProfile = uiapeDetectAdminSession() ? "admin" : "user";
+  const normalizedConfig = uiapeNormalizeConfig(getUiapPanelConfig());
 
   if (targetProfile === "admin") {
-    const result = await uiapSaveServerConfig(normalizedConfig);
+    const result = await uiapeSaveServerConfig(normalizedConfig);
     if (!result || result.ok !== true) {
       alert("Could not save UI Add-on Pack server config. Check server plugin and file permissions.");
       return;
     }
     localStorage.setItem(UIAPE_CONFIG_KEY, JSON.stringify(normalizedConfig, null, 2));
   } else {
-    const overrides = uiapBuildUserOverrides(normalizedConfig);
+    const overrides = uiapeBuildUserOverrides(normalizedConfig);
     localStorage.setItem(UIAPE_USER_CONFIG_KEY, JSON.stringify(overrides, null, 2));
     localStorage.setItem(UIAPE_CONFIG_KEY, JSON.stringify(overrides, null, 2));
     localStorage.setItem(UIAPE_ENABLE_KEY, normalizedConfig.ENABLE_PLUGIN === false ? "false" : "true");
@@ -579,7 +583,7 @@ async function saveUiapConfigAndReload() {
 }
 
 function updateUiapConfig(key, value) {
-  const next = uiapNormalizeConfig({
+  const next = uiapeNormalizeConfig({
     ...getUiapPanelConfig(),
     [key]: value
   });
@@ -648,10 +652,10 @@ function createUiapNativeEnableToggle() {
   if (window.location.pathname === '/setup') return;
 
   const adminConfig = { ...UIAPE_DEFAULT_CONFIG, ...readUiapAdminConfig() };
-  const isAdmin = uiapDetectAdminSession();
+  const isAdmin = uiapeDetectAdminSession();
 
   // Toggle is visible to everyone. Admin writes the shared server default; users write only their browser-local enable choice.
-  if (document.getElementById("uiap-enable-plugin")) return;
+  if (document.getElementById("uiape-enable-plugin")) return;
 
   const modalContent = document.querySelector(".modal-panel-content");
   if (!modalContent) return;
@@ -661,18 +665,18 @@ function createUiapNativeEnableToggle() {
 
   const wrapper = document.createElement("div");
   wrapper.className = "form-group";
-  wrapper.id = "uiap-enable-plugin-group";
+  wrapper.id = "uiape-enable-plugin-group";
   wrapper.innerHTML = `
     <div class="switch flex-container flex-phone flex-phone-column flex-phone-center">
-      <input type="checkbox" tabindex="0" id="uiap-enable-plugin" aria-label="Enable UI Add-on Pack">
-      <label for="uiap-enable-plugin" class="tooltip" data-tooltip="Enable or disable UI Add-on Pack. Reload is required."></label>
+      <input type="checkbox" tabindex="0" id="uiape-enable-plugin" aria-label="Enable UI Add-on Pack">
+      <label for="uiape-enable-plugin" class="tooltip" data-tooltip="Enable or disable UI Add-on Pack. Reload is required."></label>
       <span class="text-smaller text-uppercase text-bold color-4 p-10">Enable UI Add-on Pack</span>
     </div>
   `;
 
   formGroups[formGroups.length - 1].insertAdjacentElement("afterend", wrapper);
 
-  const checkbox = wrapper.querySelector("#uiap-enable-plugin");
+  const checkbox = wrapper.querySelector("#uiape-enable-plugin");
   if (isAdmin) {
     checkbox.checked = adminConfig.ENABLE_PLUGIN !== false;
   } else {
@@ -899,7 +903,7 @@ const RDS_ICON_PRESET = UIAPE_CONFIG.RDS_ICON_PRESET;
 const RDS_ICON_SCALE = UIAPE_CONFIG.RDS_ICON_SCALE;
 const STEREO_ICON_SCALE = UIAPE_CONFIG.STEREO_ICON_SCALE;
 
-function uiapCssScaleValue(value, factor = 1) {
+function uiapeCssScaleValue(value, factor = 1) {
   const raw = typeof value === "string" ? value.trim() : value;
   let numeric = 1;
 
@@ -914,10 +918,10 @@ function uiapCssScaleValue(value, factor = 1) {
   return Number(scaled.toFixed(4)).toString();
 }
 
-const RDS_ICON_CSS_SCALE = uiapCssScaleValue(RDS_ICON_SCALE);
+const RDS_ICON_CSS_SCALE = uiapeCssScaleValue(RDS_ICON_SCALE);
 // RDS image icons are visually smaller than the native stereo circle.
 // 120% RDS is roughly equal to 100% stereo, so stereo scale is normalized by 1/1.2.
-const STEREO_ICON_CSS_SCALE = uiapCssScaleValue(STEREO_ICON_SCALE, 1 / 1.2);
+const STEREO_ICON_CSS_SCALE = uiapeCssScaleValue(STEREO_ICON_SCALE, 1 / 1.2);
 // Stereo icon circle thickness.
 const STEREO_ICON_WIDTH = UIAPE_CONFIG.STEREO_ICON_WIDTH;
 // Uses "MS" letters instead of icons for dimmed Music/Speech icons.
@@ -948,8 +952,8 @@ const ACTIVE_RDS_INDICATOR_ICON_COLOR_OFF = resolveIconColor(RDS_INDICATOR_ICON_
 
 function refreshAutoIconColorVars() {
   const root = document.documentElement;
-  root.style.setProperty("--uiap-stereo-icon-color", resolveIconColor(STEREO_ICON_COLOR));
-  root.style.setProperty("--uiap-stereo-icon-color-off", STEREO_ICON_COLOR_OFF === "" ? "#696969" : resolveIconColor(STEREO_ICON_COLOR_OFF, ""));
+  root.style.setProperty("--uiape-stereo-icon-color", resolveIconColor(STEREO_ICON_COLOR));
+  root.style.setProperty("--uiape-stereo-icon-color-off", STEREO_ICON_COLOR_OFF === "" ? "#696969" : resolveIconColor(STEREO_ICON_COLOR_OFF, ""));
 }
 
 refreshAutoIconColorVars();
@@ -1078,35 +1082,35 @@ if (window.location.pathname !== '/setup') {
 
 // #################### UI ADD-ON PACK CONFIG PANEL #################### //
 
-function uiapIsCurrentUserAdmin() {
-  return uiapDetectAdminSession();
+function uiapeIsCurrentUserAdmin() {
+  return uiapeDetectAdminSession();
 }
 
-function uiapCanShowConfigPanel() {
+function uiapeCanShowConfigPanel() {
   // Gear/panel is visible to everyone. Admin edits the server/shared profile; users edit local overrides.
   return true;
 }
 
 function createUiapConfigLauncher() {
-    if (!uiapCanShowConfigPanel()) {
-      document.getElementById("uiap-config-gear")?.remove();
-      document.getElementById("uiap-config-panel")?.remove();
+    if (!uiapeCanShowConfigPanel()) {
+      document.getElementById("uiape-config-gear")?.remove();
+      document.getElementById("uiape-config-panel")?.remove();
       return;
     }
-    const existingGear = document.getElementById("uiap-config-gear");
-    const existingPanel = document.getElementById("uiap-config-panel");
+    const existingGear = document.getElementById("uiape-config-gear");
+    const existingPanel = document.getElementById("uiape-config-panel");
     if (existingGear && existingPanel && existingGear.isConnected && existingPanel.isConnected) return;
     if (existingGear && !existingGear.isConnected) existingGear.remove();
     if (existingPanel && !existingPanel.isConnected) existingPanel.remove();
 
-    let style = document.getElementById("uiap-config-panel-style");
+    let style = document.getElementById("uiape-config-panel-style");
     if (!style) {
     style = document.createElement("style");
-    style.id = "uiap-config-panel-style";
+    style.id = "uiape-config-panel-style";
     document.head.appendChild(style);
     }
     style.textContent = `
-      #uiap-config-gear {
+      #uiape-config-gear {
         position: absolute !important;
         right: 6px !important;
         top: 6px !important;
@@ -1136,18 +1140,18 @@ function createUiapConfigLauncher() {
         padding: 0;
       }
 
-      #signalPanel.uiap-config-host:hover > #uiap-config-gear,
-      .uiap-config-host:hover > #uiap-config-gear,
-      .uiap-config-host.uiap-config-open > #uiap-config-gear {
+      #signalPanel.uiape-config-host:hover > #uiape-config-gear,
+      .uiape-config-host:hover > #uiape-config-gear,
+      .uiape-config-host.uiape-config-open > #uiape-config-gear {
         opacity: 1 !important;
         pointer-events: auto !important;
       }
 
-      #uiap-config-gear:hover {
+      #uiape-config-gear:hover {
         filter: brightness(1.15);
       }
 
-      .uiap-config-fallback-host > #uiap-config-gear {
+      .uiape-config-fallback-host > #uiape-config-gear {
         position: fixed !important;
         right: 52px !important;
         top: 10px !important;
@@ -1156,7 +1160,7 @@ function createUiapConfigLauncher() {
         z-index: 2147483646 !important;
       }
 
-      #uiap-config-panel {
+      #uiape-config-panel {
         position: fixed;
         right: 12px;
         bottom: 12px;
@@ -1182,48 +1186,48 @@ function createUiapConfigLauncher() {
         touch-action: none;
       }
 
-      #uiap-config-panel.uiap-open {
+      #uiape-config-panel.uiape-open {
         display: flex;
         flex-direction: column;
       }
 
-      #signalPanel.uiap-config-host,
-      .uiap-config-host {
+      #signalPanel.uiape-config-host,
+      .uiape-config-host {
         position: relative !important;
         z-index: 2 !important;
         overflow: visible !important;
         isolation: auto !important;
       }
 
-      body.uiap-native-modal-open #signalPanel.uiap-config-host,
-      body.uiap-native-modal-open .uiap-config-host {
+      body.uiape-native-modal-open #signalPanel.uiape-config-host,
+      body.uiape-native-modal-open .uiape-config-host {
         z-index: 1 !important;
       }
 
-      #uiap-config-panel,
-      #uiap-config-panel .uiap-config-section,
-      #uiap-config-panel .uiap-config-section-title,
-      #uiap-config-panel .uiap-config-label,
-      #uiap-config-panel .uiap-config-label strong,
-      #uiap-config-panel .uiap-config-label span,
-      #uiap-config-panel .uiap-config-muted,
-      #uiap-config-panel .uiap-preset-summary,
-      #uiap-config-panel .uiap-plugin-map,
-      #uiap-config-panel input,
-      #uiap-config-panel textarea,
-      #uiap-config-panel select {
+      #uiape-config-panel,
+      #uiape-config-panel .uiape-config-section,
+      #uiape-config-panel .uiape-config-section-title,
+      #uiape-config-panel .uiape-config-label,
+      #uiape-config-panel .uiape-config-label strong,
+      #uiape-config-panel .uiape-config-label span,
+      #uiape-config-panel .uiape-config-muted,
+      #uiape-config-panel .uiape-preset-summary,
+      #uiape-config-panel .uiape-plugin-map,
+      #uiape-config-panel input,
+      #uiape-config-panel textarea,
+      #uiape-config-panel select {
         text-align: left !important;
       }
 
-      #uiap-config-panel .uiap-config-close,
-      #uiap-config-panel .uiap-plugin-order-add,
-      #uiap-config-panel .uiap-plugin-order-remove,
-      #uiap-config-panel .uiap-mini-button,
-      #uiap-config-panel .uiap-config-footer button {
+      #uiape-config-panel .uiape-config-close,
+      #uiape-config-panel .uiape-plugin-order-add,
+      #uiape-config-panel .uiape-plugin-order-remove,
+      #uiape-config-panel .uiape-mini-button,
+      #uiape-config-panel .uiape-config-footer button {
         text-align: center !important;
       }
 
-      .uiap-config-header {
+      .uiape-config-header {
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -1238,12 +1242,12 @@ function createUiapConfigLauncher() {
         user-select: none;
       }
 
-      .uiap-config-header > div:first-child {
+      .uiape-config-header > div:first-child {
         min-width: 0;
         flex: 1 1 auto;
       }
 
-      .uiap-config-title {
+      .uiape-config-title {
         font-weight: 700;
         letter-spacing: .02em;
         white-space: nowrap;
@@ -1252,7 +1256,7 @@ function createUiapConfigLauncher() {
         line-height: 1.15;
       }
 
-      .uiap-config-header .uiap-config-muted {
+      .uiape-config-header .uiape-config-muted {
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -1260,7 +1264,7 @@ function createUiapConfigLauncher() {
         line-height: 1.2;
       }
 
-      .uiap-config-close {
+      .uiape-config-close {
         flex: 0 0 24px;
         width: 24px;
         height: 24px;
@@ -1277,18 +1281,18 @@ function createUiapConfigLauncher() {
         justify-content: center;
       }
 
-      .uiap-config-close:hover {
+      .uiape-config-close:hover {
         background: color-mix(in srgb, var(--color-4) 20%, var(--color-3));
       }
 
-      .uiap-config-body {
+      .uiape-config-body {
         padding: 10px 12px;
         overflow: auto;
         flex: 1 1 auto;
         min-height: 0;
       }
 
-      .uiap-config-section {
+      .uiape-config-section {
         border: 1px solid color-mix(in srgb, var(--color-4, #888) 24%, transparent);
         border-radius: 12px;
         padding: 10px;
@@ -1298,18 +1302,18 @@ function createUiapConfigLauncher() {
         -webkit-backdrop-filter: none;
       }
 
-      .uiap-config-section-title {
+      .uiape-config-section-title {
         font-weight: 700;
         margin-bottom: 6px;
         color: var(--color-4, #fff);
       }
 
-      .uiap-config-muted {
+      .uiape-config-muted {
         opacity: .76;
         line-height: 1.45;
       }
 
-      .uiap-config-row {
+      .uiape-config-row {
         display: grid;
         grid-template-columns: 1fr auto;
         align-items: center;
@@ -1319,21 +1323,21 @@ function createUiapConfigLauncher() {
         border-top: 1px solid color-mix(in srgb, var(--color-4, #888) 12%, transparent);
       }
 
-      .uiap-config-row:first-of-type {
+      .uiape-config-row:first-of-type {
         border-top: 0;
       }
 
-      .uiap-config-label {
+      .uiape-config-label {
         min-width: 0;
       }
 
-      .uiap-config-label strong {
+      .uiape-config-label strong {
         display: block;
         font-size: 12px;
         line-height: 1.2;
       }
 
-      .uiap-config-label span {
+      .uiape-config-label span {
         display: block;
         margin-top: 2px;
         font-size: 11px;
@@ -1341,16 +1345,16 @@ function createUiapConfigLauncher() {
         line-height: 1.25;
       }
 
-      .uiap-config-control {
+      .uiape-config-control {
         min-width: 116px;
         display: flex;
         justify-content: flex-end;
         text-align: left !important;
       }
 
-      .uiap-config-control input[type="text"],
-      .uiap-config-control input[type="number"],
-      .uiap-config-control select {
+      .uiape-config-control input[type="text"],
+      .uiape-config-control input[type="number"],
+      .uiape-config-control select {
         width: 116px;
         box-sizing: border-box;
         border: 1px solid color-mix(in srgb, var(--color-4, #888) 32%, transparent);
@@ -1361,7 +1365,7 @@ function createUiapConfigLauncher() {
         font-size: 12px;
       }
 
-      .uiap-config-control input[type="checkbox"] {
+      .uiape-config-control input[type="checkbox"] {
         width: 18px;
         height: 18px;
         accent-color: var(--color-main-bright, var(--color-4));
@@ -1369,17 +1373,17 @@ function createUiapConfigLauncher() {
 
 
 
-      .uiap-config-control-wide {
+      .uiape-config-control-wide {
         display: block;
       }
 
-      .uiap-config-control-wide .uiap-config-control {
+      .uiape-config-control-wide .uiape-config-control {
         margin-top: 7px;
         justify-content: stretch;
       }
 
-      .uiap-config-control textarea,
-      .uiap-config-control-wide textarea {
+      .uiape-config-control textarea,
+      .uiape-config-control-wide textarea {
         width: 100%;
         height: 30px;
         min-height: 30px;
@@ -1397,14 +1401,14 @@ function createUiapConfigLauncher() {
 
 
 
-      #uiap-config-panel textarea[data-uiap-key="PLUGINS_USER_ORDER"] {
+      #uiape-config-panel textarea[data-uiape-key="PLUGINS_USER_ORDER"] {
         height: 50px !important;
         min-height: 50px !important;
         max-height: 180px !important;
         resize: vertical !important;
       }
 
-      #uiap-config-panel code {
+      #uiape-config-panel code {
         font-family: inherit !important;
         font-size: inherit !important;
         font-weight: 700 !important;
@@ -1413,18 +1417,18 @@ function createUiapConfigLauncher() {
         padding: 0 !important;
       }
 
-      .uiap-color-combo {
+      .uiape-color-combo {
         display: flex;
         gap: 5px;
         align-items: center;
         justify-content: flex-end;
       }
 
-      .uiap-color-combo select {
+      .uiape-color-combo select {
         width: 88px !important;
       }
 
-      .uiap-color-combo input[type="color"] {
+      .uiape-color-combo input[type="color"] {
         width: 30px;
         height: 28px;
         padding: 1px;
@@ -1434,7 +1438,7 @@ function createUiapConfigLauncher() {
         cursor: pointer;
       }
 
-      .uiap-preset-summary {
+      .uiape-preset-summary {
         margin: 7px 0 9px;
         padding: 8px;
         border-radius: 10px;
@@ -1443,12 +1447,12 @@ function createUiapConfigLauncher() {
         line-height: 1.45;
       }
 
-      .uiap-preset-summary code,
-      .uiap-plugin-map code {
+      .uiape-preset-summary code,
+      .uiape-plugin-map code {
         opacity: .9;
       }
 
-      .uiap-plugin-map {
+      .uiape-plugin-map {
         margin-top: 8px;
         columns: 2;
         column-gap: 18px;
@@ -1457,13 +1461,13 @@ function createUiapConfigLauncher() {
         opacity: .86;
       }
 
-      .uiap-plugin-map > div {
+      .uiape-plugin-map > div {
         break-inside: avoid;
         margin-bottom: 3px;
       }
 
-      .uiap-plugin-order-add,
-      .uiap-plugin-order-remove {
+      .uiape-plugin-order-add,
+      .uiape-plugin-order-remove {
         display: inline-flex !important;
         align-items: center !important;
         justify-content: center !important;
@@ -1481,13 +1485,13 @@ function createUiapConfigLauncher() {
         white-space: nowrap !important;
       }
 
-      .uiap-plugin-edit-map {
+      .uiape-plugin-edit-map {
         margin-top: 8px;
         display: grid;
         gap: 4px;
       }
 
-      .uiap-plugin-edit-row {
+      .uiape-plugin-edit-row {
         display: inline-grid;
         grid-template-columns: 30px 118px 154px 18px 18px;
         gap: 4px;
@@ -1496,7 +1500,7 @@ function createUiapConfigLauncher() {
         max-width: 100%;
       }
 
-      .uiap-plugin-edit-row input {
+      .uiape-plugin-edit-row input {
         min-width: 0;
         width: 100%;
         box-sizing: border-box;
@@ -1512,7 +1516,7 @@ function createUiapConfigLauncher() {
         line-height: 16px !important;
       }
 
-      .uiap-plugin-edit-row input {
+      .uiape-plugin-edit-row input {
         height: 30px !important;
         min-height: 30px !important;
         max-height: 30px !important;
@@ -1521,14 +1525,14 @@ function createUiapConfigLauncher() {
         padding-bottom: 2px !important;
       }
 
-      .uiap-plugin-edit-head {
+      .uiape-plugin-edit-head {
         opacity: .68;
         font-size: 10px;
         text-transform: uppercase;
         letter-spacing: .04em;
       }
 
-      .uiap-mini-button {
+      .uiape-mini-button {
         border: 1px solid color-mix(in srgb, var(--color-4, #888) 35%, transparent);
         border-radius: 8px;
         background: color-mix(in srgb, var(--color-3) 72%, var(--color-2));
@@ -1539,7 +1543,7 @@ function createUiapConfigLauncher() {
         margin-top: 7px;
       }
 
-      .uiap-config-warning {
+      .uiape-config-warning {
         margin-top: 8px;
         padding: 7px 8px;
         border-radius: 9px;
@@ -1548,7 +1552,7 @@ function createUiapConfigLauncher() {
         opacity: .82;
       }
 
-      .uiap-config-footer {
+      .uiape-config-footer {
         display: flex;
         gap: 6px;
         justify-content: flex-end;
@@ -1563,7 +1567,7 @@ function createUiapConfigLauncher() {
         z-index: 2;
       }
 
-      .uiap-config-footer button {
+      .uiape-config-footer button {
         border: 1px solid color-mix(in srgb, var(--color-4, #888) 45%, transparent);
         border-radius: 10px;
         background: color-mix(in srgb, var(--color-3) 72%, var(--color-2));
@@ -1575,42 +1579,46 @@ function createUiapConfigLauncher() {
         box-sizing: border-box;
       }
 
-      .uiap-config-footer button[data-uiap-action="save-all"] {
+      .uiape-config-footer button[data-uiape-action="save-all"] {
         min-width: 118px;
         max-width: 140px;
         padding-left: 8px;
         padding-right: 8px;
       }
 
-      .uiap-config-footer button[data-uiap-action="reload"],
-      .uiap-config-footer button[data-uiap-action="reset"] {
+      .uiape-config-footer button[data-uiape-action="reload"],
+      .uiape-config-footer button[data-uiape-action="reset"] {
         min-width: 58px;
         max-width: 70px;
       }
 
-      .uiap-config-footer button:hover {
+      .uiape-config-footer button:hover {
         filter: brightness(1.12);
       }
 
-      .uiap-config-save-status {
+      .uiape-config-save-status {
         margin-right: 6px;
         align-self: center;
         font-size: 11px;
-        font-weight: 700;
-        color: #fff;
+        font-weight: 800;
+        color: #f7fbff;
         text-shadow:
-            0 1px 2px rgba(0,0,0,.45),
-            0 0 4px rgba(255,255,255,.15);
-        opacity: 1.0;
+            0 1px 2px rgba(0,0,0,.72),
+            0 0 6px rgba(255,255,255,.32);
+        opacity: 1;
         white-space: nowrap;
       }
 
-      #uiap-config-panel.uiap-config-dirty .uiap-config-save-status {
+      #uiape-config-panel.uiape-config-dirty .uiape-config-save-status {
+        color: #ffe16a;
+        text-shadow:
+            0 1px 2px rgba(0,0,0,.78),
+            0 0 7px rgba(255,225,106,.44);
         opacity: 1;
       }
 
       @media (max-width: 720px) {
-        #uiap-config-panel {
+        #uiape-config-panel {
           right: 10px;
           bottom: 10px;
           top: auto;
@@ -1638,11 +1646,11 @@ function createUiapConfigLauncher() {
     }
 
     function getUiapFallbackHost() {
-        let fallback = document.getElementById("uiap-config-fallback-host");
+        let fallback = document.getElementById("uiape-config-fallback-host");
         if (!fallback) {
           fallback = document.createElement("div");
-          fallback.id = "uiap-config-fallback-host";
-          fallback.className = "uiap-config-fallback-host uiap-config-host";
+          fallback.id = "uiape-config-fallback-host";
+          fallback.className = "uiape-config-fallback-host uiape-config-host";
           document.body.appendChild(fallback);
         }
         return fallback;
@@ -1653,67 +1661,67 @@ function createUiapConfigLauncher() {
         const usingFallbackHost = !host;
         if (!host) host = getUiapFallbackHost();
 
-        const staleGear = document.getElementById("uiap-config-gear");
-        const stalePanel = document.getElementById("uiap-config-panel");
+        const staleGear = document.getElementById("uiape-config-gear");
+        const stalePanel = document.getElementById("uiape-config-panel");
         if (staleGear) staleGear.remove();
         if (stalePanel) stalePanel.remove();
 
-        host.classList.add("uiap-config-host");
-        host.classList.toggle("uiap-config-fallback-host", usingFallbackHost);
+        host.classList.add("uiape-config-host");
+        host.classList.toggle("uiape-config-fallback-host", usingFallbackHost);
 
         const gear = document.createElement("button");
-        gear.id = "uiap-config-gear";
+        gear.id = "uiape-config-gear";
         gear.type = "button";
         gear.title = "UI Add-on Pack settings";
         gear.textContent = "⚙";
 
         const panel = document.createElement("div");
-        panel.id = "uiap-config-panel";
-        const isUiapAdmin = uiapIsCurrentUserAdmin();
+        panel.id = "uiape-config-panel";
+        const isUiapAdmin = uiapeIsCurrentUserAdmin();
         panel.innerHTML = `
-          <div class="uiap-config-header">
+          <div class="uiape-config-header">
             <div>
-              <div class="uiap-config-title">UI Add-on Pack</div>
-              <div class="uiap-config-muted">Configuration panel · v${pluginVersion}</div>
+              <div class="uiape-config-title">UI Add-on Pack</div>
+              <div class="uiape-config-muted">Configuration panel · v${pluginVersion}</div>
             </div>
-            <button type="button" class="uiap-config-close" aria-label="Close">×</button>
+            <button type="button" class="uiape-config-close" aria-label="Close">×</button>
           </div>
-          <div class="uiap-config-body">
-            <div class="uiap-config-section">
-              <div class="uiap-config-section-title">Core / General Settings</div>
-              <div data-uiap-controls="core"></div>
-              <div class="uiap-config-warning">Changes are kept as a draft until you press <strong>Save All & Reload</strong>. Admin saves go to <code>plugins_configs/UIAddonPack.json</code>; user saves stay as browser-local overrides.</div>
+          <div class="uiape-config-body">
+            <div class="uiape-config-section">
+              <div class="uiape-config-section-title">Core / General Settings</div>
+              <div data-uiape-controls="core"></div>
+              <div class="uiape-config-warning">Changes are kept as a draft until you press <strong>Save All & Reload</strong>. Admin saves go to <code>plugins_configs/UIAddonPackEnhanced.json</code>; user saves stay as browser-local overrides.</div>
             </div>
-            <div class="uiap-config-section">
-              <div class="uiap-config-section-title">Mobile / Sidebar / Users</div>
-              <div data-uiap-controls="mobile"></div>
+            <div class="uiape-config-section">
+              <div class="uiape-config-section-title">Mobile / Sidebar / Users</div>
+              <div data-uiape-controls="mobile"></div>
             </div>
-            <div class="uiap-config-section">
-              <div class="uiap-config-section-title">Tuning Settings</div>
-              <div data-uiap-controls="tuning"></div>
+            <div class="uiape-config-section">
+              <div class="uiape-config-section-title">Tuning Settings</div>
+              <div data-uiape-controls="tuning"></div>
             </div>
-            <div class="uiap-config-section">
-              <div class="uiap-config-section-title">Visual Styling</div>
-              <div data-uiap-controls="visual"></div>
+            <div class="uiape-config-section">
+              <div class="uiape-config-section-title">Visual Styling</div>
+              <div data-uiape-controls="visual"></div>
             </div>
-            <div class="uiap-config-section">
-              <div class="uiap-config-section-title">RDS / Stereo Icons</div>
-              <div data-uiap-controls="rds"></div>
+            <div class="uiape-config-section">
+              <div class="uiape-config-section-title">RDS / Stereo Icons</div>
+              <div data-uiape-controls="rds"></div>
             </div>
-            <div class="uiap-config-section">
-              <div class="uiap-config-section-title">Plugin Buttons</div>
-              <div data-uiap-controls="plugins"></div>
+            <div class="uiape-config-section">
+              <div class="uiape-config-section-title">Plugin Buttons</div>
+              <div data-uiape-controls="plugins"></div>
             </div>
-            <div class="uiap-config-section">
-              <div class="uiap-config-section-title">Console Logs</div>
-              <div data-uiap-controls="console"></div>
+            <div class="uiape-config-section">
+              <div class="uiape-config-section-title">Console Logs</div>
+              <div data-uiape-controls="console"></div>
             </div>
           </div>
-          <div class="uiap-config-footer">
-            <span class="uiap-config-save-status" data-uiap-save-status>Saved</span>
-            <button type="button" data-uiap-action="save-all">Save All & Reload</button>
-            <button type="button" data-uiap-action="reload">Reload</button>
-            <button type="button" data-uiap-action="reset">Reset</button>
+          <div class="uiape-config-footer">
+            <span class="uiape-config-save-status" data-uiape-save-status>Saved</span>
+            <button type="button" data-uiape-action="save-all">Save All & Reload</button>
+            <button type="button" data-uiape-action="reload">Reload</button>
+            <button type="button" data-uiape-action="reset">Reset</button>
           </div>
         `;
 
@@ -1721,7 +1729,7 @@ function createUiapConfigLauncher() {
         document.body.appendChild(panel);
 
         function clampUiapPanelToViewport() {
-          if (!panel.classList.contains("uiap-open")) return;
+          if (!panel.classList.contains("uiape-open")) return;
           const margin = 8;
           panel.style.maxHeight = `${Math.max(260, window.innerHeight - margin * 2)}px`;
           const rect = panel.getBoundingClientRect();
@@ -1747,9 +1755,9 @@ function createUiapConfigLauncher() {
         }
 
         function togglePanel(force) {
-          const open = typeof force === "boolean" ? force : !panel.classList.contains("uiap-open");
-          panel.classList.toggle("uiap-open", open);
-          host.classList.toggle("uiap-config-open", open);
+          const open = typeof force === "boolean" ? force : !panel.classList.contains("uiape-open");
+          panel.classList.toggle("uiape-open", open);
+          host.classList.toggle("uiape-config-open", open);
           if (open) {
             resetUiapPanelPositionIfUnset();
             requestAnimationFrame(clampUiapPanelToViewport);
@@ -1768,16 +1776,16 @@ function createUiapConfigLauncher() {
           panel.addEventListener(type, (event) => event.stopPropagation());
         });
 
-        panel.querySelector(".uiap-config-close").addEventListener("click", (event) => {
+        panel.querySelector(".uiape-config-close").addEventListener("click", (event) => {
           event.preventDefault();
           event.stopPropagation();
           togglePanel(false);
         });
 
         function makeUiapPanelDraggable() {
-          const header = panel.querySelector(".uiap-config-header");
-          if (!header || header.dataset.uiapDragBound === "true") return;
-          header.dataset.uiapDragBound = "true";
+          const header = panel.querySelector(".uiape-config-header");
+          if (!header || header.dataset.uiapeDragBound === "true") return;
+          header.dataset.uiapeDragBound = "true";
 
           let dragging = false;
           let startX = 0;
@@ -1800,7 +1808,7 @@ function createUiapConfigLauncher() {
             panel.style.top = `${rect.top}px`;
             panel.style.right = "auto";
             panel.style.bottom = "auto";
-            panel.classList.add("uiap-dragging");
+            panel.classList.add("uiape-dragging");
             header.setPointerCapture?.(event.pointerId);
             event.preventDefault();
           });
@@ -1817,7 +1825,7 @@ function createUiapConfigLauncher() {
           const stopDrag = (event) => {
             if (!dragging) return;
             dragging = false;
-            panel.classList.remove("uiap-dragging");
+            panel.classList.remove("uiape-dragging");
             header.releasePointerCapture?.(event.pointerId);
             clampUiapPanelToViewport();
           };
@@ -1836,7 +1844,7 @@ function createUiapConfigLauncher() {
             const rect = el.getBoundingClientRect();
             return st.display !== "none" && st.visibility !== "hidden" && Number(st.opacity || 1) !== 0 && (rect.width > 0 || rect.height > 0 || el.id === "myModal");
           });
-          document.body.classList.toggle("uiap-native-modal-open", visibleModal);
+          document.body.classList.toggle("uiape-native-modal-open", visibleModal);
         }
 
         updateUiapNativeModalState();
@@ -1893,7 +1901,7 @@ function createUiapConfigLauncher() {
           ["GAP_ROW_2", "number", "Row 2 vertical gap", "Preset row 2 vertical adjustment."]
         ];
 
-        const uiapControlSections = {
+        const uiapeControlSections = {
           core: [
             ["CANVAS_FADE_EFFECT", "checkbox", "Canvas fade effect", "Fade in the signal graph on page load."],
             ["BUTTON_FM_LIST_MOD", "checkbox", "FMList button mod", "Move/reduce the FMLIST button."],
@@ -1968,7 +1976,6 @@ function createUiapConfigLauncher() {
             ["MULTIPATH_ATTACH_TO", "select", "Multipath attach to", "Target icon for multipath indicator.", [["STEREO","STEREO"],["PTY","PTY"],["MS","MS"],["ECC","ECC"],["TP","TP"],["TA","TA"],["RDS","RDS"]]],
             ["MULTIPATH_LEFT_PADDING", "number", "Multipath left padding", "Spacing when not attached to Stereo/Mono."],
             ["MULTIPATH_DISPLAY_MODE", "select", "Multipath display mode", "Icon, text, or both.", [["ICON","ICON"],["TEXT","TEXT"],["BOTH","BOTH"]]],
-            ["MULTIPATH_SHOW_RF_MP_TEXT", "checkbox", "Show RF/MP text", "Adds RF/MP text near multipath indicator."],
             ["IS_TEF_RADIO", "checkbox", "TEF radio mode", "Uses TEF radio MP assumption."],
             ["METRICS_MONITOR_PLUGIN_IS_INSTALLED", "checkbox", "Metrics Monitor installed", "Compatibility flag."],
             ["IS_VISUALEQ_PLUGIN_ENALBED", "checkbox", "VisualEQ enabled", "Compatibility flag; original upstream spelling kept."],
@@ -1989,7 +1996,7 @@ function createUiapConfigLauncher() {
           ]
         };
 
-        function uiapEscapeHtml(value) {
+        function uiapeEscapeHtml(value) {
           return String(value).replace(/[&<>"']/g, ch => ({
             "&": "&amp;",
             "<": "&lt;",
@@ -1999,37 +2006,37 @@ function createUiapConfigLauncher() {
           }[ch]));
         }
 
-        function uiapIsHexColor(value) {
+        function uiapeIsHexColor(value) {
           return /^#[0-9A-Fa-f]{6}$/.test(String(value || ""));
         }
 
-        function uiapColorMode(value) {
+        function uiapeColorMode(value) {
           if (value === "auto") return "auto";
-          if (uiapIsHexColor(value)) return "custom";
+          if (uiapeIsHexColor(value)) return "custom";
           return "default";
         }
 
-        function uiapDefaultColorValue(key) {
+        function uiapeDefaultColorValue(key) {
           const def = UIAPE_DEFAULT_CONFIG[key];
-          return uiapIsHexColor(def) ? def : "#ffffff";
+          return uiapeIsHexColor(def) ? def : "#ffffff";
         }
 
-        function uiapRenderColorControl(key, value) {
-          const mode = uiapColorMode(value);
-          const pickerValue = uiapIsHexColor(value) ? value : uiapDefaultColorValue(key);
+        function uiapeRenderColorControl(key, value) {
+          const mode = uiapeColorMode(value);
+          const pickerValue = uiapeIsHexColor(value) ? value : uiapeDefaultColorValue(key);
           return `
-            <div class="uiap-color-combo" data-uiap-color-combo="${key}">
-              <select data-uiap-color-mode="${key}">
+            <div class="uiape-color-combo" data-uiape-color-combo="${key}">
+              <select data-uiape-color-mode="${key}">
                 <option value="default" ${mode === "default" ? "selected" : ""}>default</option>
                 <option value="auto" ${mode === "auto" ? "selected" : ""}>auto</option>
                 <option value="custom" ${mode === "custom" ? "selected" : ""}>#RRGGBB</option>
               </select>
-              <input type="color" data-uiap-color-picker="${key}" value="${uiapEscapeHtml(pickerValue)}" ${mode === "custom" ? "" : "hidden"}>
+              <input type="color" data-uiape-color-picker="${key}" value="${uiapeEscapeHtml(pickerValue)}" ${mode === "custom" ? "" : "hidden"}>
             </div>
           `;
         }
 
-        function uiapRenderControl(def) {
+        function uiapeRenderControl(def) {
           const key = def[0];
           const type = def[1];
           const label = def[2];
@@ -2040,47 +2047,47 @@ function createUiapConfigLauncher() {
 
           let controlHtml = "";
           if (type === "checkbox") {
-            controlHtml = `<input type="checkbox" data-uiap-key="${key}" ${value ? "checked" : ""}>`;
+            controlHtml = `<input type="checkbox" data-uiape-key="${key}" ${value ? "checked" : ""}>`;
           } else if (type === "select") {
-            controlHtml = `<select data-uiap-key="${key}" data-uiap-type="select">` + options.map(option => {
+            controlHtml = `<select data-uiape-key="${key}" data-uiape-type="select">` + options.map(option => {
               const optionValue = option[0];
               const optionLabel = option[1];
-              return `<option value="${uiapEscapeHtml(optionValue)}" ${String(value) === String(optionValue) ? "selected" : ""}>${uiapEscapeHtml(optionLabel)}</option>`;
+              return `<option value="${uiapeEscapeHtml(optionValue)}" ${String(value) === String(optionValue) ? "selected" : ""}>${uiapeEscapeHtml(optionLabel)}</option>`;
             }).join("") + `</select>`;
           } else if (type === "color") {
-            controlHtml = uiapRenderColorControl(key, value);
+            controlHtml = uiapeRenderColorControl(key, value);
           } else if (type === "textarea") {
-            controlHtml = `<textarea data-uiap-key="${key}">${uiapEscapeHtml(value ?? "")}</textarea>`;
+            controlHtml = `<textarea data-uiape-key="${key}">${uiapeEscapeHtml(value ?? "")}</textarea>`;
           } else {
-            controlHtml = `<input type="${type}" data-uiap-key="${key}" value="${uiapEscapeHtml(value ?? "")}">`;
+            controlHtml = `<input type="${type}" data-uiape-key="${key}" value="${uiapeEscapeHtml(value ?? "")}">`;
           }
 
-          const rowClass = type === "textarea" ? "uiap-config-row uiap-config-control-wide" : "uiap-config-row";
+          const rowClass = type === "textarea" ? "uiape-config-row uiape-config-control-wide" : "uiape-config-row";
           return `
             <div class="${rowClass}">
-              <div class="uiap-config-label">
-                <strong>${uiapEscapeHtml(label)}</strong>
-                <span>${uiapEscapeHtml(help)}</span>
+              <div class="uiape-config-label">
+                <strong>${uiapeEscapeHtml(label)}</strong>
+                <span>${uiapeEscapeHtml(help)}</span>
               </div>
-              <div class="uiap-config-control">${controlHtml}</div>
+              <div class="uiape-config-control">${controlHtml}</div>
             </div>
           `;
         }
 
-        function uiapArrayText(value) {
+        function uiapeArrayText(value) {
           return Array.isArray(value) ? value.join(", ") : String(value ?? "");
         }
 
-        function uiapPresetLine(name, preset) {
+        function uiapePresetLine(name, preset) {
           if (!preset) return "";
-          return `<div><strong>${uiapEscapeHtml(name)}:</strong> row 1 <code>${uiapEscapeHtml(uiapArrayText(preset.FIRST_ROW))}</code> · row 2 <code>${uiapEscapeHtml(uiapArrayText(preset.SECOND_ROW))}</code></div>`;
+          return `<div><strong>${uiapeEscapeHtml(name)}:</strong> row 1 <code>${uiapeEscapeHtml(uiapeArrayText(preset.FIRST_ROW))}</code> · row 2 <code>${uiapeEscapeHtml(uiapeArrayText(preset.SECOND_ROW))}</code></div>`;
         }
 
-        function uiapRenderRdsPresetEditor() {
+        function uiapeRenderRdsPresetEditor() {
           const config = getUiapPanelConfig();
           const presets = config.RDS_ICON_STYLE_PRESETS || UIAPE_DEFAULT_CONFIG.RDS_ICON_STYLE_PRESETS;
           const userPreset = presets.user || UIAPE_DEFAULT_CONFIG.RDS_ICON_STYLE_PRESETS.user;
-          const summary = [1, 2, 3].map(id => uiapPresetLine(`Preset ${id}`, presets[id])).join("");
+          const summary = [1, 2, 3].map(id => uiapePresetLine(`Preset ${id}`, presets[id])).join("");
           const fields = UIAPE_RDS_PRESET_FIELDS.map(field => {
             const key = field[0];
             const type = field[1];
@@ -2089,31 +2096,31 @@ function createUiapConfigLauncher() {
             const rawValue = userPreset[key];
             const value = Array.isArray(rawValue) ? rawValue.join(", ") : rawValue;
             const inputHtml = type === "select"
-              ? `<select data-uiap-preset-field="${key}">${(field[4] || []).map(opt => `<option value="${uiapEscapeHtml(opt[0])}" ${String(value) === String(opt[0]) ? "selected" : ""}>${uiapEscapeHtml(opt[1])}</option>`).join("")}</select>`
-              : `<input type="${type}" data-uiap-preset-field="${key}" value="${uiapEscapeHtml(value ?? "")}">`;
+              ? `<select data-uiape-preset-field="${key}">${(field[4] || []).map(opt => `<option value="${uiapeEscapeHtml(opt[0])}" ${String(value) === String(opt[0]) ? "selected" : ""}>${uiapeEscapeHtml(opt[1])}</option>`).join("")}</select>`
+              : `<input type="${type}" data-uiape-preset-field="${key}" value="${uiapeEscapeHtml(value ?? "")}">`;
             return `
-              <div class="uiap-config-row">
-                <div class="uiap-config-label">
-                  <strong>${uiapEscapeHtml(label)}</strong>
-                  <span>${uiapEscapeHtml(help)}</span>
+              <div class="uiape-config-row">
+                <div class="uiape-config-label">
+                  <strong>${uiapeEscapeHtml(label)}</strong>
+                  <span>${uiapeEscapeHtml(help)}</span>
                 </div>
-                <div class="uiap-config-control">
+                <div class="uiape-config-control">
                   ${inputHtml}
                 </div>
               </div>
             `;
           }).join("");
           return `
-            <div class="uiap-preset-summary">
+            <div class="uiape-preset-summary">
               ${summary}
               <div style="margin-top:6px;">For custom ordering, set <code>RDS icon preset</code> to <code>User editable</code>, then edit the user preset below.</div>
-              <button type="button" class="uiap-mini-button" data-uiap-action="copy-active-rds-preset">Copy selected preset to User</button>
+              <button type="button" class="uiape-mini-button" data-uiape-action="copy-active-rds-preset">Copy selected preset to User</button>
             </div>
             ${fields}
           `;
         }
 
-        function uiapBasePluginButtonMap() {
+        function uiapeBasePluginButtonMap() {
           const config = getUiapPanelConfig();
           return {
             ...(UIAPE_DEFAULT_CONFIG.PLUGIN_BUTTON_DEFAULT_MAP || {}),
@@ -2121,7 +2128,7 @@ function createUiapConfigLauncher() {
           };
         }
 
-        function uiapPluginLabel(num, fallback) {
+        function uiapePluginLabel(num, fallback) {
           const config = getUiapPanelConfig();
           const labels = {
             ...(UIAPE_DEFAULT_CONFIG.PLUGIN_BUTTON_DEFAULT_LABELS || {}),
@@ -2132,7 +2139,7 @@ function createUiapConfigLauncher() {
           return labels[num] || fallback || `Custom Plugin (${num})`;
         }
 
-        function uiapGetPluginCustomMap() {
+        function uiapeGetPluginCustomMap() {
           const config = getUiapPanelConfig();
           return {
             ...(UIAPE_DEFAULT_CONFIG.PLUGIN_BUTTON_CUSTOM_MAP || {}),
@@ -2140,72 +2147,72 @@ function createUiapConfigLauncher() {
           };
         }
 
-        function uiapPluginButtonId(num, fallbackId) {
-          const baseMap = uiapBasePluginButtonMap();
-          const customMap = uiapGetPluginCustomMap();
+        function uiapePluginButtonId(num, fallbackId) {
+          const baseMap = uiapeBasePluginButtonMap();
+          const customMap = uiapeGetPluginCustomMap();
           return customMap[num] || baseMap[num] || fallbackId || "";
         }
 
-        function uiapPluginRowsForPanel() {
+        function uiapePluginRowsForPanel() {
           const baseNums = UIAPE_PLUGIN_BUTTON_DEFAULTS.map(item => item[0]);
-          const customNums = Object.keys(uiapGetPluginCustomMap()).map(Number).filter(Number.isFinite);
+          const customNums = Object.keys(uiapeGetPluginCustomMap()).map(Number).filter(Number.isFinite);
           return Array.from(new Set([...baseNums, ...customNums])).sort((a, b) => a - b);
         }
 
-        function uiapRenderPluginOrderHelper() {
+        function uiapeRenderPluginOrderHelper() {
           const byNum = new Map(UIAPE_PLUGIN_BUTTON_DEFAULTS.map(item => [item[0], item]));
-          const customMap = uiapGetPluginCustomMap();
+          const customMap = uiapeGetPluginCustomMap();
           return `
-            <div class="uiap-preset-summary">
+            <div class="uiape-preset-summary">
               Enable <code>Sort plugin buttons</code>, then write the wanted sequence in <code>Plugin order</code>. Use the small <code>+</code> / <code>-</code> next to each title to add or remove that number. For unknown buttons, add a new number below and paste the real DOM id, e.g. <code>webstats-btn</code>.
             </div>
-            <div class="uiap-plugin-map">
-              ${uiapPluginRowsForPanel().map(num => {
+            <div class="uiape-plugin-map">
+              ${uiapePluginRowsForPanel().map(num => {
                 const item = byNum.get(num);
-                const label = uiapPluginLabel(num, item?.[1]);
-                return `<div><code>${num}</code> = ${uiapEscapeHtml(label)} <button type="button" class="uiap-mini-button uiap-plugin-order-add" data-uiap-action="append-plugin-order" data-uiap-plugin-num="${num}" title="Add ${num} to order">+</button><button type="button" class="uiap-mini-button uiap-plugin-order-remove" data-uiap-action="remove-plugin-order" data-uiap-plugin-num="${num}" title="Remove ${num} from order">-</button></div>`;
+                const label = uiapePluginLabel(num, item?.[1]);
+                return `<div><code>${num}</code> = ${uiapeEscapeHtml(label)} <button type="button" class="uiape-mini-button uiape-plugin-order-add" data-uiape-action="append-plugin-order" data-uiape-plugin-num="${num}" title="Add ${num} to order">+</button><button type="button" class="uiape-mini-button uiape-plugin-order-remove" data-uiape-action="remove-plugin-order" data-uiape-plugin-num="${num}" title="Remove ${num} from order">-</button></div>`;
               }).join("")}
             </div>
-            <div class="uiap-preset-summary" style="margin-top:8px;">
+            <div class="uiape-preset-summary" style="margin-top:8px;">
               Editable button map. You can edit the plugin order manually directly or use +/- to add or remove from the predefined plugins id list. You can edit IDs <code>32-35</code> to any existing button id, or add more numbers for extra buttons not included in the original list.
             </div>
-            <div class="uiap-plugin-edit-map">
-              <div class="uiap-plugin-edit-row uiap-plugin-edit-head"><span>No.</span><span>Label</span><span>Button DOM id</span><span></span><span></span></div>
-              ${uiapPluginRowsForPanel().filter(num => num >= 32 || (customMap[num] && num !== 30 && num !== 31)).map(num => {
+            <div class="uiape-plugin-edit-map">
+              <div class="uiape-plugin-edit-row uiape-plugin-edit-head"><span>No.</span><span>Label</span><span>Button DOM id</span><span></span><span></span></div>
+              ${uiapePluginRowsForPanel().filter(num => num >= 32 || (customMap[num] && num !== 30 && num !== 31)).map(num => {
                 const item = byNum.get(num);
-                const label = uiapPluginLabel(num, item?.[1]);
-                const id = uiapPluginButtonId(num, item?.[2]);
-                return `<div class="uiap-plugin-edit-row"><code>${num}</code><input type="text" data-uiap-custom-plugin-label="${num}" value="${uiapEscapeHtml(label)}"><input type="text" data-uiap-custom-plugin-map="${num}" value="${uiapEscapeHtml(id)}" placeholder="button-id"><button type="button" class="uiap-mini-button uiap-plugin-order-add" data-uiap-action="append-plugin-order" data-uiap-plugin-num="${num}" title="Add ${num} to order">+</button><button type="button" class="uiap-mini-button uiap-plugin-order-remove" data-uiap-action="remove-plugin-order" data-uiap-plugin-num="${num}" title="Remove ${num} from order">-</button></div>`;
+                const label = uiapePluginLabel(num, item?.[1]);
+                const id = uiapePluginButtonId(num, item?.[2]);
+                return `<div class="uiape-plugin-edit-row"><code>${num}</code><input type="text" data-uiape-custom-plugin-label="${num}" value="${uiapeEscapeHtml(label)}"><input type="text" data-uiape-custom-plugin-map="${num}" value="${uiapeEscapeHtml(id)}" placeholder="button-id"><button type="button" class="uiape-mini-button uiape-plugin-order-add" data-uiape-action="append-plugin-order" data-uiape-plugin-num="${num}" title="Add ${num} to order">+</button><button type="button" class="uiape-mini-button uiape-plugin-order-remove" data-uiape-action="remove-plugin-order" data-uiape-plugin-num="${num}" title="Remove ${num} from order">-</button></div>`;
               }).join("")}
             </div>
-            <button type="button" class="uiap-mini-button" data-uiap-action="add-plugin-map-row">Add custom button number</button>
+            <button type="button" class="uiape-mini-button" data-uiape-action="add-plugin-map-row">Add custom button number</button>
           `;
         }
 
-        function uiapIsControlVisibleForCurrentUser(def) {
+        function uiapeIsControlVisibleForCurrentUser(def) {
           const key = def && def[0];
           if (!key) return true;
-          if (uiapDetectAdminSession()) return true;
+          if (uiapeDetectAdminSession()) return true;
           return !UIAPE_ADMIN_ONLY_CONTROL_KEYS.has(key);
         }
 
-        function uiapRenderAllControls() {
-          const isAdmin = uiapDetectAdminSession();
-          Object.keys(uiapControlSections).forEach(sectionName => {
-            const target = panel.querySelector(`[data-uiap-controls="${sectionName}"]`);
+        function uiapeRenderAllControls() {
+          const isAdmin = uiapeDetectAdminSession();
+          Object.keys(uiapeControlSections).forEach(sectionName => {
+            const target = panel.querySelector(`[data-uiape-controls="${sectionName}"]`);
             if (!target) return;
-            const visibleDefs = uiapControlSections[sectionName].filter(uiapIsControlVisibleForCurrentUser);
-            target.innerHTML = visibleDefs.map(uiapRenderControl).join("");
-            if (sectionName === "rds") target.insertAdjacentHTML("beforeend", uiapRenderRdsPresetEditor());
-            if (sectionName === "plugins") target.insertAdjacentHTML("beforeend", uiapRenderPluginOrderHelper());
+            const visibleDefs = uiapeControlSections[sectionName].filter(uiapeIsControlVisibleForCurrentUser);
+            target.innerHTML = visibleDefs.map(uiapeRenderControl).join("");
+            if (sectionName === "rds") target.insertAdjacentHTML("beforeend", uiapeRenderRdsPresetEditor());
+            if (sectionName === "plugins") target.insertAdjacentHTML("beforeend", uiapeRenderPluginOrderHelper());
           });
         }
 
-        function uiapParseList(value) {
+        function uiapeParseList(value) {
           return String(value || "").split(",").map(item => item.trim()).filter(Boolean);
         }
 
-        function uiapUpdateUserPresetField(field, value) {
+        function uiapeUpdateUserPresetField(field, value) {
           const config = getUiapPanelConfig();
           const presets = {
             ...UIAPE_DEFAULT_CONFIG.RDS_ICON_STYLE_PRESETS,
@@ -2217,7 +2224,7 @@ function createUiapConfigLauncher() {
           };
           const modeFields = ["MS_HEIGHT_MODE", "TP_HEIGHT_MODE", "TA_HEIGHT_MODE"];
           const nextValue = field === "FIRST_ROW" || field === "SECOND_ROW"
-            ? uiapParseList(value)
+            ? uiapeParseList(value)
             : modeFields.includes(field)
               ? String(value || "PTY")
               : Number(value);
@@ -2232,18 +2239,18 @@ function createUiapConfigLauncher() {
           updateUiapConfig("RDS_ICON_STYLE_PRESETS", nextPresets);
         }
 
-        uiapRenderAllControls();
+        uiapeRenderAllControls();
 
         panel.addEventListener("change", (event) => {
           const field = event.target;
 
-          const colorModeKey = field?.dataset?.uiapColorMode;
+          const colorModeKey = field?.dataset?.uiapeColorMode;
           if (colorModeKey) {
-            const picker = panel.querySelector(`[data-uiap-color-picker="${colorModeKey}"]`);
+            const picker = panel.querySelector(`[data-uiape-color-picker="${colorModeKey}"]`);
             const mode = field.value;
             if (picker) picker.hidden = mode !== "custom";
             if (mode === "custom") {
-              updateUiapConfig(colorModeKey, picker?.value || uiapDefaultColorValue(colorModeKey));
+              updateUiapConfig(colorModeKey, picker?.value || uiapeDefaultColorValue(colorModeKey));
             } else if (mode === "auto") {
               updateUiapConfig(colorModeKey, "auto");
             } else {
@@ -2252,19 +2259,19 @@ function createUiapConfigLauncher() {
             return;
           }
 
-          const colorPickerKey = field?.dataset?.uiapColorPicker;
+          const colorPickerKey = field?.dataset?.uiapeColorPicker;
           if (colorPickerKey) {
             updateUiapConfig(colorPickerKey, field.value);
             return;
           }
 
-          const presetField = field?.dataset?.uiapPresetField;
+          const presetField = field?.dataset?.uiapePresetField;
           if (presetField) {
-            uiapUpdateUserPresetField(presetField, field.value);
+            uiapeUpdateUserPresetField(presetField, field.value);
             return;
           }
 
-          const customPluginLabel = field?.dataset?.uiapCustomPluginLabel;
+          const customPluginLabel = field?.dataset?.uiapeCustomPluginLabel;
           if (customPluginLabel) {
             const labels = {
               ...(UIAPE_DEFAULT_CONFIG.PLUGIN_BUTTON_CUSTOM_LABELS || {}),
@@ -2272,11 +2279,11 @@ function createUiapConfigLauncher() {
             };
             labels[customPluginLabel] = field.value || `Custom Plugin (${customPluginLabel})`;
             updateUiapConfig("PLUGIN_BUTTON_CUSTOM_LABELS", labels);
-            uiapRenderAllControls();
+            uiapeRenderAllControls();
             return;
           }
 
-          const customPluginMap = field?.dataset?.uiapCustomPluginMap;
+          const customPluginMap = field?.dataset?.uiapeCustomPluginMap;
           if (customPluginMap) {
             const map = {
               ...(UIAPE_DEFAULT_CONFIG.PLUGIN_BUTTON_CUSTOM_MAP || {}),
@@ -2284,11 +2291,11 @@ function createUiapConfigLauncher() {
             };
             map[customPluginMap] = field.value.trim();
             updateUiapConfig("PLUGIN_BUTTON_CUSTOM_MAP", map);
-            uiapRenderAllControls();
+            uiapeRenderAllControls();
             return;
           }
 
-          const key = field?.dataset?.uiapKey;
+          const key = field?.dataset?.uiapeKey;
           if (!key) return;
 
           let value;
@@ -2308,7 +2315,7 @@ function createUiapConfigLauncher() {
         });
 
         panel.addEventListener("click", (event) => {
-          const action = event.target?.dataset?.uiapAction;
+          const action = event.target?.dataset?.uiapeAction;
           if (!action) return;
 
           if (action === "copy-active-rds-preset") {
@@ -2323,7 +2330,7 @@ function createUiapConfigLauncher() {
             };
             updateUiapConfig("RDS_ICON_STYLE_PRESETS", nextPresets);
             updateUiapConfig("RDS_ICON_PRESET", 0);
-            uiapRenderAllControls();
+            uiapeRenderAllControls();
             return;
           }
 
@@ -2347,13 +2354,13 @@ function createUiapConfigLauncher() {
             labels[nextNum] = `Custom Plugin (${nextNum})`;
             updateUiapConfig("PLUGIN_BUTTON_CUSTOM_MAP", map);
             updateUiapConfig("PLUGIN_BUTTON_CUSTOM_LABELS", labels);
-            uiapRenderAllControls();
+            uiapeRenderAllControls();
             return;
           }
 
           if (action === "append-plugin-order") {
-            const num = event.target?.dataset?.uiapPluginNum;
-            const orderField = panel.querySelector('[data-uiap-key="PLUGINS_USER_ORDER"]');
+            const num = event.target?.dataset?.uiapePluginNum;
+            const orderField = panel.querySelector('[data-uiape-key="PLUGINS_USER_ORDER"]');
             if (num && orderField) {
               const current = String(orderField.value || "").split(",").map(x => x.trim()).filter(Boolean);
               if (!current.includes(num)) current.push(num);
@@ -2364,8 +2371,8 @@ function createUiapConfigLauncher() {
           }
 
           if (action === "remove-plugin-order") {
-            const num = event.target?.dataset?.uiapPluginNum;
-            const orderField = panel.querySelector('[data-uiap-key="PLUGINS_USER_ORDER"]');
+            const num = event.target?.dataset?.uiapePluginNum;
+            const orderField = panel.querySelector('[data-uiape-key="PLUGINS_USER_ORDER"]');
             if (num && orderField) {
               const current = String(orderField.value || "").split(",").map(x => x.trim()).filter(Boolean);
               const next = current.filter(x => x !== String(num));
@@ -2386,7 +2393,7 @@ function createUiapConfigLauncher() {
           }
 
           if (action === "reset") {
-            const isAdmin = uiapDetectAdminSession();
+            const isAdmin = uiapeDetectAdminSession();
             const message = isAdmin
               ? "Reset shared UI Add-on Pack server config to plugin defaults and reload?"
               : "Reset your personal UI Add-on Pack overrides and reload?";
@@ -2413,8 +2420,8 @@ function createUiapConfigLauncher() {
     attachLauncher();
 
     const observer = new MutationObserver(() => {
-        const gear = document.getElementById("uiap-config-gear");
-        const panel = document.getElementById("uiap-config-panel");
+        const gear = document.getElementById("uiape-config-gear");
+        const panel = document.getElementById("uiape-config-panel");
         const host = findUiapHost();
         if (!gear || !panel || !gear.isConnected || !panel.isConnected || (host && gear.parentElement !== host)) {
             attachLauncher();
@@ -2424,17 +2431,17 @@ function createUiapConfigLauncher() {
     observer.observe(document.body, { childList: true, subtree: true });
 
     setTimeout(() => {
-        const gear = document.getElementById("uiap-config-gear");
-        const panel = document.getElementById("uiap-config-panel");
+        const gear = document.getElementById("uiape-config-gear");
+        const panel = document.getElementById("uiape-config-panel");
         if (!gear || !panel || !gear.isConnected || !panel.isConnected) attachLauncher();
     }, 800);
 
     // Extra repair loop for RDS/Stereo icon rebuilds: when #signalPanel is rewritten,
     // the gear can be removed with innerHTML. Reattach it without touching saved settings.
     setInterval(() => {
-        const host = findUiapHost() || document.getElementById("uiap-config-fallback-host");
-        const gear = document.getElementById("uiap-config-gear");
-        const panel = document.getElementById("uiap-config-panel");
+        const host = findUiapHost() || document.getElementById("uiape-config-fallback-host");
+        const gear = document.getElementById("uiape-config-gear");
+        const panel = document.getElementById("uiape-config-panel");
         if (!host || !panel) {
             attachLauncher();
             return;
@@ -2443,7 +2450,7 @@ function createUiapConfigLauncher() {
             attachLauncher();
             return;
         }
-        host.classList.add("uiap-config-host");
+        host.classList.add("uiape-config-host");
         host.style.setProperty("z-index", "2", "important");
         host.style.setProperty("overflow", "visible", "important");
     }, 1200);
@@ -2774,7 +2781,7 @@ if (STEREO_ICON_COLOR !== "default") {
       existingStyle.id = styleId;
       document.head.appendChild(existingStyle);
     }
-    existingStyle.textContent = `.circle.data-st { border: 2px solid var(--uiap-stereo-icon-color) }`;
+    existingStyle.textContent = `.circle.data-st { border: 2px solid var(--uiape-stereo-icon-color) }`;
 
     function clamp(num, min, max) {
       return Math.min(Math.max(num, min), max);
@@ -2836,12 +2843,12 @@ if (STEREO_ICON_COLOR !== "default") {
           el.style.backgroundColor = 'inherit';
           el.style.boxShadow = 'none';
 
-          existingStyle.textContent = `.circle.data-st { border: 2px solid var(--uiap-stereo-icon-color-off) }`;
+          existingStyle.textContent = `.circle.data-st { border: 2px solid var(--uiape-stereo-icon-color-off) }`;
 
           return;
         }
 
-        existingStyle.textContent = `.circle.data-st { border: 2px solid var(--uiap-stereo-icon-color) }`;
+        existingStyle.textContent = `.circle.data-st { border: 2px solid var(--uiape-stereo-icon-color) }`;
 
         if (!LED_GLOW_EFFECT_ICONS) return;
 
@@ -4250,7 +4257,7 @@ function addRandomIcon(result) {
 
     const displayMode = String(MULTIPATH_DISPLAY_MODE || "ICON").toUpperCase();
     const showMultipathIcon = displayMode !== "TEXT";
-    const showMultipathText = MULTIPATH_SHOW_RF_MP_TEXT && displayMode !== "ICON";
+    const showMultipathText = displayMode !== "ICON";
 
     const signalText = (Number.isFinite(sig) && sigDisplay !== "") ? sigDisplay : "-";
     const multipathText = tooltipSigRawMultipath || "-";
@@ -4731,7 +4738,7 @@ if (SORT_PLUGIN_BUTTONS) {
     ...SORT_PLUGIN_BUTTONS_CUSTOM_MAP
   };
 
-  const uiapCssId = id => {
+  const uiapeCssId = id => {
     const clean = String(id || '').trim();
     if (!clean) return '';
     if (window.CSS && typeof CSS.escape === 'function') return `#${CSS.escape(clean)}`;
@@ -4750,7 +4757,7 @@ if (SORT_PLUGIN_BUTTONS) {
   // Set explicit order user-defined buttons
   orderArray.forEach((num, index) => {
     const buttonId = SORT_PLUGIN_BUTTONS_MAP[num];
-    const selector = uiapCssId(buttonId);
+    const selector = uiapeCssId(buttonId);
     if (selector) {
       cssRulesSortPlugins += `${selector} { order: ${index + 1}; }\n`;
     }
@@ -4759,7 +4766,7 @@ if (SORT_PLUGIN_BUTTONS) {
   // Assign high order to all other buttons
   Object.entries(SORT_PLUGIN_BUTTONS_MAP).forEach(([num, buttonId]) => {
     if (!orderedSet.has(parseInt(num))) {
-      const selector = uiapCssId(buttonId);
+      const selector = uiapeCssId(buttonId);
       if (selector) cssRulesSortPlugins += `${selector} { order: 999; }\n`;
     }
   });
@@ -4790,14 +4797,14 @@ const RDS_ICON_STYLE_TP_TA_GAP = ACTIVE_PRESET.TP_TA_GAP;
 const RDS_ICON_STYLE_MS_TOP_PADDING = ACTIVE_PRESET.MS_TOP_PADDING;
 const RDS_ICON_STYLE_STEREO_ICON_SPACING = ACTIVE_PRESET.STEREO_ICON_SPACING;
 const RDS_ICON_STYLE_PTY_HEIGHT = ACTIVE_PRESET.PTY_HEIGHT;
-function uiapResolveRdsIconHeight(prefix) {
+function uiapeResolveRdsIconHeight(prefix) {
   const mode = ACTIVE_PRESET[`${prefix}_HEIGHT_MODE`];
   const customHeight = Number(ACTIVE_PRESET[`${prefix}_HEIGHT`]);
   return mode === "CUSTOM" && Number.isFinite(customHeight) ? customHeight : RDS_ICON_STYLE_PTY_HEIGHT;
 }
-const RDS_ICON_STYLE_MS_HEIGHT = uiapResolveRdsIconHeight("MS");
-const RDS_ICON_STYLE_TP_HEIGHT = uiapResolveRdsIconHeight("TP");
-const RDS_ICON_STYLE_TA_HEIGHT = uiapResolveRdsIconHeight("TA");
+const RDS_ICON_STYLE_MS_HEIGHT = uiapeResolveRdsIconHeight("MS");
+const RDS_ICON_STYLE_TP_HEIGHT = uiapeResolveRdsIconHeight("TP");
+const RDS_ICON_STYLE_TA_HEIGHT = uiapeResolveRdsIconHeight("TA");
 const RDS_ICON_STYLE_BW_MARGIN_LEFT = ACTIVE_PRESET.BW_MARGIN_LEFT;
 const RDS_ICON_STYLE_GAP_ROW_1 = ACTIVE_PRESET.GAP_ROW_1;
 const RDS_ICON_STYLE_GAP_ROW_2 = ACTIVE_PRESET.GAP_ROW_2;
@@ -4854,7 +4861,7 @@ ${METRICS_MONITOR_PLUGIN_IS_INSTALLED === false ? `
 }` : ""}
 
 ${RDS_ICON_SCALE !== "100%" ?
-`#signalPanel > *:not(#uiap-config-gear):not(#uiap-config-panel) {
+`#signalPanel > *:not(#uiape-config-gear):not(#uiape-config-panel) {
     transform: scale(${RDS_ICON_CSS_SCALE});
     transform-origin: center;
 }`
@@ -4962,7 +4969,7 @@ ${!IS_VISUALEQ_PLUGIN_ENABLED && (LED_GLOW_EFFECT_ICONS && (RDS_ICON_STYLE || LE
 
 #signal-icons #stereoIcon.stereo-on .circle-container .circle {
     border: ${STEREO_ICON_WIDTH}px solid;
-    border-color: var(--uiap-stereo-icon-color);
+    border-color: var(--uiape-stereo-icon-color);
 }
 
 #signal-icons #stereoIcon.stereo-on .circle-container .circle::after {
@@ -4973,13 +4980,13 @@ ${!IS_VISUALEQ_PLUGIN_ENABLED && (LED_GLOW_EFFECT_ICONS && (RDS_ICON_STYLE || LE
   width: 100%;
   height: 100%;
   border-radius: 50%;
-  border: 1.5px solid var(--uiap-stereo-icon-color);
+  border: 1.5px solid var(--uiape-stereo-icon-color);
   opacity: 0.15;
 }
 
 #signal-icons #stereoIcon.stereo-off .circle-container .circle {
     border: ${STEREO_ICON_WIDTH}px solid;
-    border-color: var(--uiap-stereo-icon-color-off);
+    border-color: var(--uiape-stereo-icon-color-off);
 }
 ` : ''}
 
@@ -5059,23 +5066,23 @@ ${!IS_VISUALEQ_PLUGIN_ENABLED && (LED_GLOW_EFFECT_ICONS && (RDS_ICON_STYLE || LE
 document.head.appendChild(style);
 
 // Keep the UIAP config launcher above the signal icons after RDS/Stereo icons rebuild, without letting the signal panel cover native modals.
-const uiapConfigPanelSignalHardeningStyle = document.createElement('style');
-uiapConfigPanelSignalHardeningStyle.id = 'uiap-config-panel-signal-hardening-style';
-uiapConfigPanelSignalHardeningStyle.textContent = `
-  #signalPanel.uiap-config-host {
+const uiapeConfigPanelSignalHardeningStyle = document.createElement('style');
+uiapeConfigPanelSignalHardeningStyle.id = 'uiape-config-panel-signal-hardening-style';
+uiapeConfigPanelSignalHardeningStyle.textContent = `
+  #signalPanel.uiape-config-host {
     position: relative !important;
     z-index: 2 !important;
     overflow: visible !important;
     isolation: auto !important;
   }
-  body.uiap-native-modal-open #signalPanel.uiap-config-host {
+  body.uiape-native-modal-open #signalPanel.uiape-config-host {
     z-index: 1 !important;
   }
-  #signalPanel.uiap-config-host #uiap-config-gear {
+  #signalPanel.uiape-config-host #uiape-config-gear {
     transform: none !important;
     z-index: 2147483646 !important;
   }
-  #uiap-config-panel {
+  #uiape-config-panel {
     transform: none !important;
     z-index: 2147483647 !important;
     text-align: left !important;
@@ -5083,38 +5090,38 @@ uiapConfigPanelSignalHardeningStyle.textContent = `
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
   }
-  #uiap-config-panel,
-  #uiap-config-panel .uiap-config-section,
-  #uiap-config-panel .uiap-config-label,
-  #uiap-config-panel .uiap-config-label strong,
-  #uiap-config-panel .uiap-config-label span,
-  #uiap-config-panel .uiap-config-muted,
-  #uiap-config-panel .uiap-preset-summary,
-  #uiap-config-panel .uiap-plugin-map,
-  #uiap-config-panel input,
-  #uiap-config-panel textarea,
-  #uiap-config-panel select {
+  #uiape-config-panel,
+  #uiape-config-panel .uiape-config-section,
+  #uiape-config-panel .uiape-config-label,
+  #uiape-config-panel .uiape-config-label strong,
+  #uiape-config-panel .uiape-config-label span,
+  #uiape-config-panel .uiape-config-muted,
+  #uiape-config-panel .uiape-preset-summary,
+  #uiape-config-panel .uiape-plugin-map,
+  #uiape-config-panel input,
+  #uiape-config-panel textarea,
+  #uiape-config-panel select {
     text-align: left !important;
   }
-  #uiap-config-panel .uiap-config-close,
-  #uiap-config-panel .uiap-plugin-order-add,
-  #uiap-config-panel .uiap-mini-button,
-  #uiap-config-panel .uiap-config-footer button {
+  #uiape-config-panel .uiape-config-close,
+  #uiape-config-panel .uiape-plugin-order-add,
+  #uiape-config-panel .uiape-mini-button,
+  #uiape-config-panel .uiape-config-footer button {
     text-align: center !important;
   }
-  #uiap-config-panel textarea {
+  #uiape-config-panel textarea {
     height: 30px !important;
     min-height: 30px !important;
     max-height: 160px !important;
     line-height: 18px !important;
     resize: vertical !important;
   }
-  #uiap-config-panel textarea[data-uiap-key="PLUGINS_USER_ORDER"] {
+  #uiape-config-panel textarea[data-uiape-key="PLUGINS_USER_ORDER"] {
     height: 50px !important;
     min-height: 50px !important;
     max-height: 180px !important;
   }
-  #uiap-config-panel .uiap-plugin-edit-row input {
+  #uiape-config-panel .uiape-plugin-edit-row input {
     height: 30px !important;
     min-height: 30px !important;
     max-height: 30px !important;
@@ -5122,7 +5129,7 @@ uiapConfigPanelSignalHardeningStyle.textContent = `
     padding-top: 2px !important;
     padding-bottom: 2px !important;
   }
-  #uiap-config-panel code {
+  #uiape-config-panel code {
     font-family: inherit !important;
     font-size: inherit !important;
     font-weight: 700 !important;
@@ -5132,7 +5139,7 @@ uiapConfigPanelSignalHardeningStyle.textContent = `
   }
 
 `;
-document.head.appendChild(uiapConfigPanelSignalHardeningStyle);
+document.head.appendChild(uiapeConfigPanelSignalHardeningStyle);
 
 //
 // --------------------------------------------------------------
@@ -5737,7 +5744,7 @@ function handleTextSocketMessage(message) {
         }
 
         const cssVarHex = normalizeHexColor(
-            getComputedStyle(document.documentElement).getPropertyValue('--uiap-stereo-icon-color')
+            getComputedStyle(document.documentElement).getPropertyValue('--uiape-stereo-icon-color')
         );
         if (cssVarHex) return cssVarHex;
 
@@ -5814,8 +5821,8 @@ function handleTextSocketMessage(message) {
       applyRdsIndicatorColor(rdsIcon, false);
     }
 
-    if (!rdsIcon.dataset.uiapThemeObserver) {
-      rdsIcon.dataset.uiapThemeObserver = "1";
+    if (!rdsIcon.dataset.uiapeThemeObserver) {
+      rdsIcon.dataset.uiapeThemeObserver = "1";
       const rdsThemeObserver = new MutationObserver(() => {
         applyRdsIndicatorColor(
           rdsIcon,
@@ -6397,33 +6404,33 @@ function checkUpdate(setupOnly, pluginName, urlUpdateLink, urlFetchLink) {
 (function installUiapLateZIndexRepair() {
   if (window.location.pathname === '/setup') return;
   const style = document.createElement('style');
-  style.id = 'uiap-config-late-zindex-repair-v14';
+  style.id = 'uiape-config-late-zindex-repair-v14';
   style.textContent = `
-    #signalPanel.uiap-config-host,
-    #flags-container-desktop.uiap-config-host {
+    #signalPanel.uiape-config-host,
+    #flags-container-desktop.uiape-config-host {
       position: relative !important;
       z-index: 2 !important;
       overflow: visible !important;
       isolation: auto !important;
     }
-    body.uiap-native-modal-open #signalPanel.uiap-config-host,
-    body.uiap-native-modal-open #flags-container-desktop.uiap-config-host {
+    body.uiape-native-modal-open #signalPanel.uiape-config-host,
+    body.uiape-native-modal-open #flags-container-desktop.uiape-config-host {
       z-index: 1 !important;
     }
-    #signalPanel.uiap-config-host > #uiap-config-gear,
-    #flags-container-desktop.uiap-config-host > #uiap-config-gear {
+    #signalPanel.uiape-config-host > #uiape-config-gear,
+    #flags-container-desktop.uiape-config-host > #uiape-config-gear {
       z-index: 60 !important;
       pointer-events: none !important;
     }
-    #signalPanel.uiap-config-host:hover > #uiap-config-gear,
-    #flags-container-desktop.uiap-config-host:hover > #uiap-config-gear,
-    #signalPanel.uiap-config-host.uiap-config-open > #uiap-config-gear,
-    #flags-container-desktop.uiap-config-host.uiap-config-open > #uiap-config-gear {
+    #signalPanel.uiape-config-host:hover > #uiape-config-gear,
+    #flags-container-desktop.uiape-config-host:hover > #uiape-config-gear,
+    #signalPanel.uiape-config-host.uiape-config-open > #uiape-config-gear,
+    #flags-container-desktop.uiape-config-host.uiape-config-open > #uiape-config-gear {
       opacity: 1 !important;
       visibility: visible !important;
       pointer-events: auto !important;
     }
-    #uiap-config-panel {
+    #uiape-config-panel {
       z-index: 2147483647 !important;
     }
   `;

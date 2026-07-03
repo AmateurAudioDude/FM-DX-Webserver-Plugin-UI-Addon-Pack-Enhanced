@@ -138,6 +138,10 @@ function isPluginRequest(req) {
     return (req.get('X-Plugin-Name') || '') === 'UIAddonPackEnhanced';
 }
 
+function isAdminRequest(req) {
+    return req.session?.isAdminAuthenticated === true;
+}
+
 function readJsonBody(req, callback) {
     if (req.body && typeof req.body === 'object') {
         callback(null, req.body);
@@ -177,6 +181,7 @@ endpointsRouter.get('/ui-addon-pack-enhanced-config', (req, res) => {
     res.json({
         ok: true,
         path: configFilePath,
+        isAdmin: isAdminRequest(req),
         config: sharedConfig
     });
 });
@@ -184,6 +189,11 @@ endpointsRouter.get('/ui-addon-pack-enhanced-config', (req, res) => {
 endpointsRouter.post('/ui-addon-pack-enhanced-config', (req, res) => {
     if (!isPluginRequest(req)) {
         res.status(403).json({ error: 'Unauthorised' });
+        return;
+    }
+
+    if (!isAdminRequest(req)) {
+        res.status(403).json({ ok: false, error: 'Admin only' });
         return;
     }
 
