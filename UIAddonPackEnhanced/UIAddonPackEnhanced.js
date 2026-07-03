@@ -567,7 +567,7 @@ async function saveUiapConfigAndReload() {
   if (targetProfile === "admin") {
     const result = await uiapeSaveServerConfig(normalizedConfig);
     if (!result || result.ok !== true) {
-      alert("Could not save UI Add-on Pack server config. Check server plugin and file permissions.");
+      alert("Could not save UI Add-on Pack Enhanced server config. Check server plugin and file permissions.");
       return;
     }
     localStorage.setItem(UIAPE_CONFIG_KEY, JSON.stringify(normalizedConfig, null, 2));
@@ -1080,7 +1080,7 @@ document.head.appendChild(styleFixesElement);
 if (window.location.pathname !== '/setup') {
 
 
-// #################### UI ADD-ON PACK CONFIG PANEL #################### //
+// #################### UI ADD-ON PACK ENHANCED CONFIG PANEL #################### //
 
 function uiapeIsCurrentUserAdmin() {
   return uiapeDetectAdminSession();
@@ -1672,7 +1672,7 @@ function createUiapConfigLauncher() {
         const gear = document.createElement("button");
         gear.id = "uiape-config-gear";
         gear.type = "button";
-        gear.title = "UI Add-on Pack settings";
+        gear.title = "UI Add-on Pack Enhanced settings";
         gear.textContent = "⚙";
 
         const panel = document.createElement("div");
@@ -1681,7 +1681,7 @@ function createUiapConfigLauncher() {
         panel.innerHTML = `
           <div class="uiape-config-header">
             <div>
-              <div class="uiape-config-title">UI Add-on Pack</div>
+              <div class="uiape-config-title">UI Add-on Pack Enhanced</div>
               <div class="uiape-config-muted">Configuration panel · v${pluginVersion}</div>
             </div>
             <button type="button" class="uiape-config-close" aria-label="Close">×</button>
@@ -2395,8 +2395,8 @@ function createUiapConfigLauncher() {
           if (action === "reset") {
             const isAdmin = uiapeDetectAdminSession();
             const message = isAdmin
-              ? "Reset shared UI Add-on Pack server config to plugin defaults and reload?"
-              : "Reset your personal UI Add-on Pack overrides and reload?";
+              ? "Reset shared UI Add-on Pack Enhanced server config to plugin defaults and reload?"
+              : "Reset your personal UI Add-on Pack Enhanced overrides and reload?";
             if (!confirm(message)) return;
 
             if (isAdmin) {
@@ -6092,7 +6092,7 @@ function createIconElement(iconType) {
       return img;
     }
     default:
-      console.warn(`[UI Add-on Pack] Unknown icon type: ${iconType}`);
+      console.warn(`[UI Add-on Pack Enhanced] Unknown icon type: ${iconType}`);
       return null;
   }
 }
