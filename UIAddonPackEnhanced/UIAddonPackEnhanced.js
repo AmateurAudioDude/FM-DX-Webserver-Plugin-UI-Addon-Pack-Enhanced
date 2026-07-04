@@ -221,6 +221,11 @@ const UIAPE_LIVE_CSS_KEYS = new Set([
 let uiapeLiveStyleElement = null;              // dedicated <style> holding all live CSS
 let uiapeRebuildRdsIconPanel = null;           // set inside the RDS/Stereo icons block, if it runs
 let uiapeReapplyMultipathIndicator = null;     // set inside the multipath indicator block, if it runs
+
+// Parse-time position marker: our styles insert before this, so later plugin CSS (e.g. Metrics Monitor) wins cascade ties exactly as it does against the original synchronous plugin.
+const uiapeStyleAnchor = document.createElement('style');
+uiapeStyleAnchor.id = 'uiape-style-anchor';
+document.head.appendChild(uiapeStyleAnchor);
 let UIAPE_SAVED_BASELINE = null;              // snapshot of the last persisted config
 const UIAPE_RELOAD_DIRTY_KEYS = new Set();    // changed reload-required keys awaiting a reload
 
@@ -810,10 +815,8 @@ function uiapeValuesEqual(a, b) {
 function uiapeRefreshLiveCss() {
   if (uiapeLiveStyleElement) {
     uiapeLiveStyleElement.textContent = uiapeBuildLiveCss(getUiapPanelConfig());
-    // Re-append so it stays last in <head>, overriding same-specificity rules
-    // from <style> blocks that get inserted later (e.g. the RDS/Stereo icons
-    // block, which is only created once at load time).
-    document.head.appendChild(uiapeLiveStyleElement);
+    // Keep it last among this plugin's styles but before the anchor, so other plugins' later CSS still wins ties like it does against the original.
+    document.head.insertBefore(uiapeLiveStyleElement, uiapeStyleAnchor);
   }
 }
 
@@ -869,7 +872,8 @@ function uiapeAfterConfigChange(key) {
     return;
   }
   if (key === "RDS_ICON_PRESET" || key === "RDS_ICON_STYLE_PRESETS") {
-    if (uiapeRebuildRdsIconPanel) uiapeRebuildRdsIconPanel();
+    // Only rebuild when Enhanced owns the icon row; otherwise this would overwrite Metrics Monitor's panel.
+    if (uiapeRebuildRdsIconPanel && getUiapPanelConfig().RDS_ICON_STYLE) uiapeRebuildRdsIconPanel();
     uiapeRefreshLiveCss();
     return;
   }
@@ -1294,7 +1298,7 @@ function uiapeBuildLiveCss(cfg) {
   ) {
     const rdsPreset = uiapeGetActiveRdsPreset(cfg);
     const rdsCssScale = uiapeCssScaleValue(cfg.RDS_ICON_SCALE);
-    const stereoCssScale = uiapeCssScaleValue(cfg.STEREO_ICON_SCALE, 1 / 1.2);
+    const stereoCssScale = uiapeCssScaleValue(cfg.STEREO_ICON_SCALE, 1);
     const rdsGlowEnabled = !cfg.IS_VISUALEQ_PLUGIN_ENALBED && (cfg.LED_GLOW_EFFECT_ICONS && (cfg.RDS_ICON_STYLE || cfg.LED_GLOW_EFFECT_ICONS_METRICS_MONITOR_PLUGIN));
 
     css += `
@@ -1332,13 +1336,13 @@ ${cfg.METRICS_MONITOR_PLUGIN_IS_INSTALLED === false ? `
 }` : ""}
 
 ${cfg.RDS_ICON_SCALE !== "100%" ?
-`#signalPanel > *:not(#uiape-config-gear):not(#uiape-config-panel) {
+`#signalPanel > *:where(:not(#uiape-config-gear, #uiape-config-panel)) {
     transform: scale(${rdsCssScale});
     transform-origin: center;
 }`
 : ''}
 
-${cfg.LED_GLOW_EFFECT_ICONS_METRICS_MONITOR_PLUGIN === false ? `
+${cfg.METRICS_MONITOR_PLUGIN_IS_INSTALLED === false ? `
 #signal-icons {
   display: flex;
   flex-direction: column;
@@ -1367,6 +1371,7 @@ ${cfg.REPLACE_MPX_LOGO_WITH_STEREO_LOGO_METRICS_MONITOR_PLUGIN && cfg.APPLY_STER
 }
 ` : ''}
 
+${cfg.RDS_ICON_STYLE ? `
 #signal-icons #stereoIcon {
   transform: translateY(-1px) scale(${stereoCssScale});
 }
@@ -1380,6 +1385,7 @@ ${cfg.REPLACE_MPX_LOGO_WITH_STEREO_LOGO_METRICS_MONITOR_PLUGIN && cfg.APPLY_STER
   border: ${cfg.STEREO_ICON_WIDTH}px solid;
   border-color: var(--uiape-stereo-icon-color-off);
 }
+` : ''}
 
 ${rdsGlowEnabled ? `
 /* Stereo icon glow effect for RDS_ICON_STYLE */
@@ -1405,6 +1411,7 @@ ${rdsGlowEnabled ? `
 }
 ` : ''}
 
+${cfg.RDS_ICON_STYLE ? `
 #signal-icons #stereoIcon.stereo-off .circle-container .circle,
 #signal-icons #stereoIcon.stereo-off .circle-container {
   ${cfg.REDUCE_HALF_OPACITY === true ? "opacity: 0.9;" : ""}
@@ -1426,6 +1433,7 @@ ${rdsGlowEnabled ? `
   height: ${cfg.RDS_INDICATOR_ICON_TYPE === 1 ? 14 : 18}px !important;
   width: auto !important;
 }
+` : ''}
 `;
   }
 
@@ -1864,9 +1872,7 @@ const IS_VISUALEQ_PLUGIN_ENABLED = IS_VISUALEQ_PLUGIN_ENALBED;
 // RDS icon style presets. See below to configure user preset.
 // Options: 0 = user-defined, 1 = preset 1, 2 = preset 2, 3 = preset 3.
 const RDS_ICON_PRESET = UIAPE_CONFIG.RDS_ICON_PRESET;
-// RDS icons size.
-const RDS_ICON_SCALE = UIAPE_CONFIG.RDS_ICON_SCALE;
-const STEREO_ICON_SCALE = UIAPE_CONFIG.STEREO_ICON_SCALE;
+// RDS/stereo icon sizes are read live from config in uiapeBuildLiveCss.
 
 function uiapeCssScaleValue(value, factor = 1) {
   const raw = typeof value === "string" ? value.trim() : value;
@@ -1898,10 +1904,7 @@ function uiapeResolveLiveRdsIconHeight(preset, prefix, ptyHeight) {
   return mode === "CUSTOM" && Number.isFinite(customHeight) ? customHeight : ptyHeight;
 }
 
-const RDS_ICON_CSS_SCALE = uiapeCssScaleValue(RDS_ICON_SCALE);
-// RDS image icons are visually smaller than the native stereo circle.
-// 120% RDS is roughly equal to 100% stereo, so stereo scale is normalized by 1/1.2.
-const STEREO_ICON_CSS_SCALE = uiapeCssScaleValue(STEREO_ICON_SCALE, 1 / 1.2);
+// RDS/stereo icon CSS scales are computed live in uiapeBuildLiveCss (rdsCssScale/stereoCssScale).
 // Stereo icon circle thickness. Read live via cfg.STEREO_ICON_WIDTH in uiapeBuildLiveCss.
 // Uses "MS" letters instead of icons for dimmed Music/Speech icons.
 const RDS_ICON_STYLE_MS_OFF_AS_LETTERS = UIAPE_CONFIG.RDS_ICON_STYLE_MS_OFF_AS_LETTERS;
@@ -2133,9 +2136,9 @@ function createUiapConfigLauncher() {
 
       .uiape-config-fallback-host > #uiape-config-gear {
         position: fixed !important;
-        right: 52px !important;
-        top: 10px !important;
-        opacity: 1 !important;
+        right: 48px !important;
+        top: 96px !important;
+        opacity: 0.8 !important;
         pointer-events: auto !important;
         z-index: 899 !important;
       }
@@ -2175,7 +2178,6 @@ function createUiapConfigLauncher() {
       .uiape-config-host {
         position: relative !important;
         z-index: 2 !important;
-        overflow: visible !important;
         isolation: auto !important;
       }
 
@@ -2633,6 +2635,7 @@ function createUiapConfigLauncher() {
     `;
 
     function findUiapHost() {
+        //return null;
         const candidates = [
             document.getElementById("signalPanel"),
             document.querySelector("#signalPanel"),
@@ -2973,7 +2976,7 @@ function createUiapConfigLauncher() {
             ["STEREO_ICON_COLOR", "color", "Stereo icon color", "default, auto, or custom #RRGGBB."],
             ["STEREO_ICON_COLOR_OFF", "color", "Stereo off color", "default, auto, or custom #RRGGBB."],
             ["STEREO_ICON_WIDTH", "number", "Stereo icon width", "Stereo circle thickness."],
-            ["STEREO_ICON_SCALE", "text", "Stereo icon scale", "Example: 100%, 110%, 120%. Normalized to match RDS visual size."],
+            ["STEREO_ICON_SCALE", "text", "Stereo icon scale", "Example: 100%, 110%, 120%. Normalised to match RDS visual size."],
             ["APPLY_STEREO_ICON_GLOW_WITH_MISSING_RDS", "checkbox", "Stereo glow without RDS", "Keeps stereo glow when RDS is missing."],
 
             ["RDS_ICON_SCALE", "text", "RDS icon scale", "Example: 100%, 110%, 120%."],
@@ -3537,7 +3540,6 @@ function createUiapConfigLauncher() {
         }
         host.classList.add("uiape-config-host");
         host.style.setProperty("z-index", "2", "important");
-        host.style.setProperty("overflow", "visible", "important");
     }, 1200);
 }
 
@@ -3568,7 +3570,7 @@ styleElement.id = 'uiape-live-style';
 styleElement.textContent = uiapeBuildLiveCss(getUiapPanelConfig());
 uiapeLiveStyleElement = styleElement;
 
-document.head.appendChild(styleElement);
+document.head.insertBefore(styleElement, uiapeStyleAnchor);
 
 // +++++++++++++++ STEP 4b (start) +++++++++++++++ //
 // DOM/behavioral feature blocks start here and run down through the rest of the file.
@@ -5567,7 +5569,7 @@ style.innerHTML = `
   justify-content: center;
   margin-left: 0;
   margin-right: 1px;
-  transform: translateY(-1px) scale(${STEREO_ICON_CSS_SCALE});
+  transform: translateY(-1px);
   transform-origin: center;
 }
 
@@ -5592,7 +5594,8 @@ style.innerHTML = `
   display: none !important;
 }
 
-/* PTY Label */
+${RDS_ICON_STYLE ? `
+/* PTY Label (Enhanced-owned row only; Metrics Monitor styles its own #ptyLabel) */
 #ptyLabel {
   font-size: 13px;
   color: #fff;
@@ -5606,6 +5609,7 @@ style.innerHTML = `
   margin: 0;
   flex-shrink: 0;
 }
+` : ''}
 
 /* BW Label */
 #bwLabel {
@@ -5630,7 +5634,8 @@ style.innerHTML = `
   opacity: 0.9;
 }
 `;
-document.head.appendChild(style);
+// Before the live style element so live-toggle rules can still override these static ones.
+document.head.insertBefore(style, uiapeLiveStyleElement || uiapeStyleAnchor);
 
 // Keep the UIAP config launcher above the signal icons after RDS/Stereo icons rebuild, without letting the signal panel cover native modals.
 const uiapeConfigPanelSignalHardeningStyle = document.createElement('style');
@@ -5639,7 +5644,6 @@ uiapeConfigPanelSignalHardeningStyle.textContent = `
   #signalPanel.uiape-config-host {
     position: relative !important;
     z-index: 2 !important;
-    overflow: visible !important;
     isolation: auto !important;
   }
   body.uiape-native-modal-open #signalPanel.uiape-config-host {
@@ -6829,11 +6833,8 @@ function initMetricsMonitor() {
   setupTextSocket();
 }
 
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", initMetricsMonitor);
-} else {
-  if (RDS_ICON_STYLE) initMetricsMonitor();
-}
+// Must run unconditionally (like the original's DOMContentLoaded path); a readyState check here would skip setupTextSocket() since this async file resumes after DOM ready.
+uiapeOnDomReady(initMetricsMonitor);
 
 }
 
@@ -6966,7 +6967,6 @@ function checkUpdate(setupOnly, pluginName, urlUpdateLink, urlFetchLink) {
     #flags-container-desktop.uiape-config-host {
       position: relative !important;
       z-index: 2 !important;
-      overflow: visible !important;
       isolation: auto !important;
     }
     body.uiape-native-modal-open #signalPanel.uiape-config-host,
