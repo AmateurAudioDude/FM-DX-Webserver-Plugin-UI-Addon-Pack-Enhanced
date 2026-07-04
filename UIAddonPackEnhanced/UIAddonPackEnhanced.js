@@ -1284,6 +1284,16 @@ function uiapeBuildLiveCss(cfg) {
     }
   }
 
+  // RDS icon scale located here to decouple from "Metrics icon glow" for Metrics Monitor.
+  if (!cfg.IS_VISUALEQ_PLUGIN_ENALBED && window.innerWidth > 360 && cfg.RDS_ICON_SCALE !== "100%") {
+    css += `
+#signalPanel > *:where(:not(#uiape-config-gear, #uiape-config-panel)) {
+    transform: scale(${uiapeCssScaleValue(cfg.RDS_ICON_SCALE)});
+    transform-origin: center;
+}
+`;
+  }
+
   // RDS/Stereo Icons: mirrors (as property-level overrides, not full rule
   // duplicates) the static <style> block built once inside the MetricsMonitor-
   // derived block further down in the file, so these settings can update
@@ -1297,7 +1307,6 @@ function uiapeBuildLiveCss(cfg) {
     window.innerWidth > 360
   ) {
     const rdsPreset = uiapeGetActiveRdsPreset(cfg);
-    const rdsCssScale = uiapeCssScaleValue(cfg.RDS_ICON_SCALE);
     const stereoCssScale = uiapeCssScaleValue(cfg.STEREO_ICON_SCALE, 1);
     const rdsGlowEnabled = !cfg.IS_VISUALEQ_PLUGIN_ENALBED && (cfg.LED_GLOW_EFFECT_ICONS && (cfg.RDS_ICON_STYLE || cfg.LED_GLOW_EFFECT_ICONS_METRICS_MONITOR_PLUGIN));
 
@@ -1334,13 +1343,6 @@ ${cfg.METRICS_MONITOR_PLUGIN_IS_INSTALLED === false ? `
     align-items: center;
   }
 }` : ""}
-
-${cfg.RDS_ICON_SCALE !== "100%" ?
-`#signalPanel > *:where(:not(#uiape-config-gear, #uiape-config-panel)) {
-    transform: scale(${rdsCssScale});
-    transform-origin: center;
-}`
-: ''}
 
 ${cfg.METRICS_MONITOR_PLUGIN_IS_INSTALLED === false ? `
 #signal-icons {
