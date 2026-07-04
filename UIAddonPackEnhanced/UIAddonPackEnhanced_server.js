@@ -34,6 +34,10 @@ function resolveConfigFolderPath() {
 const configFolderPath = resolveConfigFolderPath();
 const configFilePath = path.join(configFolderPath, 'UIAddonPackEnhanced.json');
 
+// Hard safety cap on the saved config file. This is enforced in writeJsonFileAtomic,
+// the single choke point every write goes through, so it holds regardless of caller.
+const MAX_CONFIG_FILE_BYTES = 100 * 1024; // 100 KB
+
 // Keep this intentionally small. The client plugin merges this shared profile over its complete UIAP_DEFAULT_CONFIG.
 // After the admin saves from the panel, the JSON file will contain the full shared/default profile.
 const defaultConfig = {
@@ -54,8 +58,45 @@ function sanitizeConfig(config) {
     }));
 }
 
+// Defends against a compromised/malicious admin session flooding a single input
+// field (a notice message, a custom label, a preset row, etc) with a huge string
+// to bloat the file. Checked on every save, in addition to the whole-file cap in
+// writeJsonFileAtomic - that cap alone would reject the save but not say why.
+const MAX_CONFIG_FIELD_STRING_LENGTH = 2000;
+
+function findOversizedStringField(value, fieldPath) {
+    if (typeof value === 'string') {
+        return value.length > MAX_CONFIG_FIELD_STRING_LENGTH ? (fieldPath || '(root)') : null;
+    }
+    if (Array.isArray(value)) {
+        for (let i = 0; i < value.length; i++) {
+            const found = findOversizedStringField(value[i], `${fieldPath}[${i}]`);
+            if (found) return found;
+        }
+        return null;
+    }
+    if (value && typeof value === 'object') {
+        for (const key of Object.keys(value)) {
+            const found = findOversizedStringField(value[key], fieldPath ? `${fieldPath}.${key}` : key);
+            if (found) return found;
+        }
+        return null;
+    }
+    return null;
+}
+
 function writeJsonFileAtomic(filePath, data) {
     const json = JSON.stringify(data, null, 2);
+
+    const sizeBytes = Buffer.byteLength(json, 'utf-8');
+    if (sizeBytes > MAX_CONFIG_FILE_BYTES) {
+        const error = new Error(
+            `Config would be ${(sizeBytes / 1024).toFixed(1)} KB, exceeding the ${(MAX_CONFIG_FILE_BYTES / 1024).toFixed(0)} KB limit`
+        );
+        error.tooLarge = true;
+        throw error;
+    }
+
     const tmpPath = `${filePath}.tmp`;
     const fd = fs.openSync(tmpPath, 'w');
     try {
@@ -110,14 +151,25 @@ function saveConfig(config) {
     try {
         ensureConfigFile();
 
-        sharedConfig = sanitizeConfig(config);
-        const result = writeJsonFileAtomic(configFilePath, sharedConfig);
+        const sanitized = sanitizeConfig(config);
 
-        logInfo(`[${pluginName}] Saved shared config to ${configFilePath} (${result.bytes} bytes)`);
-        return true;
+        const oversizedField = findOversizedStringField(sanitized, '');
+        if (oversizedField) {
+            const error = new Error(
+                `Field "${oversizedField}" exceeds the ${MAX_CONFIG_FIELD_STRING_LENGTH}-character limit for a single value`
+            );
+            error.tooLarge = true;
+            throw error;
+        }
+
+        const result = writeJsonFileAtomic(configFilePath, sanitized);
+        sharedConfig = sanitized;
+
+        logInfo(`[${pluginName}] Saved shared config (${result.bytes} bytes)`);
+        return { ok: true };
     } catch (error) {
         logError(`[${pluginName}] Error saving shared config: ${error.message}`);
-        return false;
+        return { ok: false, error: error.message, tooLarge: error.tooLarge === true };
     }
 }
 
@@ -136,6 +188,15 @@ function watchConfigFile() {
 
 function isPluginRequest(req) {
     return (req.get('X-Plugin-Name') || '') === 'UIAddonPackEnhanced';
+}
+
+function isAdminRequest(req) {
+    return req.session?.isAdminAuthenticated === true;
+}
+
+function checkStrictAdmin(req, res, next) {
+    if (isAdminRequest(req)) return next();
+    return res.status(401).json({ error: 'Unauthorised' });
 }
 
 function readJsonBody(req, callback) {
@@ -176,12 +237,12 @@ endpointsRouter.get('/ui-addon-pack-enhanced-config', (req, res) => {
 
     res.json({
         ok: true,
-        path: configFilePath,
+        isAdmin: isAdminRequest(req),
         config: sharedConfig
     });
 });
 
-endpointsRouter.post('/ui-addon-pack-enhanced-config', (req, res) => {
+endpointsRouter.post('/ui-addon-pack-enhanced-config', checkStrictAdmin, (req, res) => {
     if (!isPluginRequest(req)) {
         res.status(403).json({ error: 'Unauthorised' });
         return;
@@ -194,16 +255,15 @@ endpointsRouter.post('/ui-addon-pack-enhanced-config', (req, res) => {
         }
 
         const config = body && body.config ? body.config : body;
-        const saved = saveConfig(config);
+        const result = saveConfig(config);
 
-        if (!saved) {
-            res.status(500).json({ ok: false, error: 'Could not save config' });
+        if (!result.ok) {
+            res.status(result.tooLarge ? 413 : 500).json({ ok: false, error: result.error || 'Could not save config' });
             return;
         }
 
         res.json({
             ok: true,
-            path: configFilePath,
             config: sharedConfig
         });
     });
