@@ -1454,14 +1454,12 @@ function checkPiForQuestionMark() {
 function uiapeApplyCanvasFadeEffect() {
   const canvasGraph = document.querySelector('.wrapper-outer #wrapper .canvas-container #signal-canvas');
   if (!canvasGraph) return;
-  // Reset instantly (no transition) before fading back in, so a live re-trigger
-  // doesn't fade out first because of the transition left over from a prior run.
-  canvasGraph.style.transition = 'none';
-  canvasGraph.style.opacity = 0;
-  setTimeout(() => {
-      canvasGraph.style.transition = 'opacity 0.3s ease-in';
-      canvasGraph.style.opacity = 1;
-  }, 100);
+  // Avoids style mutations so it can't trigger other plugins' MutationObservers.
+  canvasGraph.getAnimations().forEach(anim => anim.cancel());
+  canvasGraph.animate(
+    [{ opacity: 0 }, { opacity: 1 }],
+    { duration: 300, easing: 'ease-in', fill: 'none' }
+  );
 }
 
 // Creates the volume toast + attaches its listeners to #volumeSlider; no-ops if already
