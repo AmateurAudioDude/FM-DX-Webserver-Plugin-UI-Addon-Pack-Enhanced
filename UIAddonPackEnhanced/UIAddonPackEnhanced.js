@@ -549,6 +549,8 @@ const UIAPE_DEFAULT_CONFIG = {
   // per-setting via the "Admin only" checkbox next to each control - see
   // uiapeIsControlVisibleForCurrentUser() and the "uiapeAdminOnlyKey" change handler.
   ADMIN_ONLY_KEYS: [
+    "RDS_ICON_STYLE_REMOVE_RDS_ICON",
+    "LED_GLOW_EFFECT_ICONS_METRICS_MONITOR_PLUGIN",
     "REPLACE_MPX_LOGO_WITH_STEREO_LOGO_METRICS_MONITOR_PLUGIN",
     "DEFAULT_SIGNAL_UNIT",
     "BANDWIDTH_UPDATE_INTERVAL",
