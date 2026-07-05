@@ -21,6 +21,18 @@ const UIAPE_ENABLE_KEY = "uiape_enabled";
 const UIAPE_CONFIG_KEY = "uiape_config";
 const UIAPE_USER_CONFIG_KEY = "uiape_user_config";
 const ENABLE_PLUGIN_DEFAULT = true;
+const UIAPE_EXPAND_CANVAS_ENABLED_KEY = "uiape_expand_canvas_feature_enabled";
+
+// Best-effort early paint for "Expand Canvas"
+try {
+  if (localStorage.getItem(UIAPE_EXPAND_CANVAS_ENABLED_KEY) === "true" && localStorage.getItem("expandCanvasHeight") === "true") {
+    const uiapeEarlyCanvasContainer = document.querySelector('.canvas-container');
+    if (uiapeEarlyCanvasContainer) {
+      const uiapeEarlySavedHeight = parseInt(localStorage.getItem('canvasHeight'), 10);
+      uiapeEarlyCanvasContainer.style.height = `${Number.isFinite(uiapeEarlySavedHeight) ? Math.max(140, Math.min(uiapeEarlySavedHeight, 200)) : 172}px`;
+    }
+  }
+} catch (error) {}
 
 /*
     ADDING A NEW SETTING
@@ -221,6 +233,7 @@ const UIAPE_LIVE_CSS_KEYS = new Set([
 let uiapeLiveStyleElement = null;              // dedicated <style> holding all live CSS
 let uiapeRebuildRdsIconPanel = null;           // set inside the RDS/Stereo icons block, if it runs
 let uiapeReapplyMultipathIndicator = null;     // set inside the multipath indicator block, if it runs
+let uiapeMobileStatusBarConnectionFn = null;   // set inside the MOBILE_STATUS_BAR_CONNECTION block, so moveButtons() (a sibling block) can call it
 
 // Parse-time position marker: our styles insert before this, so later plugin CSS (e.g. Metrics Monitor) wins cascade ties exactly as it does against the original synchronous plugin.
 const uiapeStyleAnchor = document.createElement('style');
@@ -361,7 +374,6 @@ const UIAPE_DEFAULT_CONFIG = {
   MULTIPATH_ATTACH_TO: "STEREO",
   MULTIPATH_LEFT_PADDING: -8,
   MULTIPATH_DISPLAY_MODE: "BOTH",
-  MULTIPATH_SHOW_RF_MP_TEXT: false,
   IS_TEF_RADIO: false,
 
   TUNE_DELAY_ENABLE: false,
@@ -402,7 +414,7 @@ const UIAPE_DEFAULT_CONFIG = {
   RDS_ICON_STYLE: false,
   RDS_ICON_STYLE_MOBILE: false,
   METRICS_MONITOR_PLUGIN_IS_INSTALLED: false,
-  IS_VISUALEQ_PLUGIN_ENALBED: false,
+  IS_VISUALEQ_PLUGIN_ENABLED: false,
 
   RDS_ICON_PRESET: 1,
   RDS_ICON_SCALE: "100%",
@@ -552,7 +564,7 @@ const UIAPE_DEFAULT_CONFIG = {
     "TUNE_DELAY_IF_MORE_THAN_ONE_USER",
     "IS_TEF_RADIO",
     "METRICS_MONITOR_PLUGIN_IS_INSTALLED",
-    "IS_VISUALEQ_PLUGIN_ENALBED"
+    "IS_VISUALEQ_PLUGIN_ENABLED"
   ],
   // Tracks which keys this saved profile has already been reconciled against (see
   // uiapeReconcileAdminOnlyKeys()). Lets a later plugin update add a new key to the
@@ -881,8 +893,7 @@ function uiapeAfterConfigChange(key) {
     key === "MULTIPATH_INDICATOR" ||
     key === "MULTIPATH_ATTACH_TO" ||
     key === "MULTIPATH_LEFT_PADDING" ||
-    key === "MULTIPATH_DISPLAY_MODE" ||
-    key === "MULTIPATH_SHOW_RF_MP_TEXT"
+    key === "MULTIPATH_DISPLAY_MODE"
   ) {
     if (uiapeReapplyMultipathIndicator) uiapeReapplyMultipathIndicator();
     return;
@@ -1285,7 +1296,7 @@ function uiapeBuildLiveCss(cfg) {
   }
 
   // RDS icon scale located here to decouple from "Metrics icon glow" for Metrics Monitor.
-  if (!cfg.IS_VISUALEQ_PLUGIN_ENALBED && window.innerWidth > 360 && cfg.RDS_ICON_SCALE !== "100%") {
+  if (!cfg.IS_VISUALEQ_PLUGIN_ENABLED && window.innerWidth > 360 && cfg.RDS_ICON_SCALE !== "100%") {
     css += `
 #signalPanel > *:where(:not(#uiape-config-gear, #uiape-config-panel)) {
     transform: scale(${uiapeCssScaleValue(cfg.RDS_ICON_SCALE)});
@@ -1302,13 +1313,13 @@ function uiapeBuildLiveCss(cfg) {
   // RDS_ICON_STYLE_REMOVE_RDS_ICON) was already active at page load - turning
   // that master feature itself on/off still needs a reload.
   if (
-    !cfg.IS_VISUALEQ_PLUGIN_ENALBED &&
+    !cfg.IS_VISUALEQ_PLUGIN_ENABLED &&
     (cfg.RDS_ICON_STYLE || cfg.LED_GLOW_EFFECT_ICONS_METRICS_MONITOR_PLUGIN || cfg.RDS_ICON_STYLE_REMOVE_RDS_ICON) &&
     window.innerWidth > 360
   ) {
     const rdsPreset = uiapeGetActiveRdsPreset(cfg);
     const stereoCssScale = uiapeCssScaleValue(cfg.STEREO_ICON_SCALE, 1);
-    const rdsGlowEnabled = !cfg.IS_VISUALEQ_PLUGIN_ENALBED && (cfg.LED_GLOW_EFFECT_ICONS && (cfg.RDS_ICON_STYLE || cfg.LED_GLOW_EFFECT_ICONS_METRICS_MONITOR_PLUGIN));
+    const rdsGlowEnabled = !cfg.IS_VISUALEQ_PLUGIN_ENABLED && (cfg.LED_GLOW_EFFECT_ICONS && (cfg.RDS_ICON_STYLE || cfg.LED_GLOW_EFFECT_ICONS_METRICS_MONITOR_PLUGIN));
 
     css += `
 ${cfg.RDS_ICON_STYLE_REMOVE_RDS_ICON === true ? `
@@ -1775,6 +1786,8 @@ const MOBILE_STATUS_BAR_CONNECTION = UIAPE_CONFIG.MOBILE_STATUS_BAR_CONNECTION;
 const SIDEBAR_ADDITIONS = UIAPE_CONFIG.SIDEBAR_ADDITIONS;
 // Side bar option to increase the canvas height, which affects the signal graph, and plugins, such as "Spectrum Graph" and "RDS Logger".
 const SIDEBAR_ADDITIONS_EXPAND_CANVAS = UIAPE_CONFIG.SIDEBAR_ADDITIONS_EXPAND_CANVAS;
+// Cached for the early-paint check above (top of file), so it reflects an admin disabling this feature too.
+try { localStorage.setItem(UIAPE_EXPAND_CANVAS_ENABLED_KEY, SIDEBAR_ADDITIONS_EXPAND_CANVAS ? "true" : "false"); } catch (error) {}
 // Side bar option to hide the background image.
 const SIDEBAR_ADDITIONS_HIDE_BACKGROUND = UIAPE_CONFIG.SIDEBAR_ADDITIONS_HIDE_BACKGROUND;
 // #################### MULTIPLE USERS POPUP #################### //
@@ -1801,8 +1814,6 @@ const MULTIPATH_LEFT_PADDING = UIAPE_CONFIG.MULTIPATH_LEFT_PADDING;
 // Multipath display mode.
 // Options: "ICON", "TEXT", "BOTH".
 const MULTIPATH_DISPLAY_MODE = UIAPE_CONFIG.MULTIPATH_DISPLAY_MODE;
-// Adds RF/MP text next to the multipath indicator when MULTIPATH_DISPLAY_MODE is "TEXT" or "BOTH".
-const MULTIPATH_SHOW_RF_MP_TEXT = UIAPE_CONFIG.MULTIPATH_SHOW_RF_MP_TEXT;
 // Set to true if using a TEF radio or false if using a TEF module. Based on the assumption TEF radio MP peaks around 40%.
 const IS_TEF_RADIO = UIAPE_CONFIG.IS_TEF_RADIO;
 // #################### NEW USER TUNING DELAY #################### //
@@ -1867,9 +1878,7 @@ const STEREO_ICON_COLOR_OFF = UIAPE_CONFIG.STEREO_ICON_COLOR_OFF;
 const RDS_ICON_STYLE = UIAPE_CONFIG.RDS_ICON_STYLE;
 const RDS_ICON_STYLE_MOBILE = UIAPE_CONFIG.RDS_ICON_STYLE_MOBILE;
 const METRICS_MONITOR_PLUGIN_IS_INSTALLED = UIAPE_CONFIG.METRICS_MONITOR_PLUGIN_IS_INSTALLED;
-const IS_VISUALEQ_PLUGIN_ENALBED = UIAPE_CONFIG.IS_VISUALEQ_PLUGIN_ENALBED;
-// Compatibility alias introduced in upstream 1.1.9 naming.
-const IS_VISUALEQ_PLUGIN_ENABLED = IS_VISUALEQ_PLUGIN_ENALBED;
+const IS_VISUALEQ_PLUGIN_ENABLED = UIAPE_CONFIG.IS_VISUALEQ_PLUGIN_ENABLED;
 
 // RDS icon style presets. See below to configure user preset.
 // Options: 0 = user-defined, 1 = preset 1, 2 = preset 2, 3 = preset 3.
@@ -2138,8 +2147,8 @@ function createUiapConfigLauncher() {
 
       .uiape-config-fallback-host > #uiape-config-gear {
         position: fixed !important;
-        right: 48px !important;
-        top: 96px !important;
+        right: 60px !important;
+        top: 176px !important;
         opacity: 0.8 !important;
         pointer-events: auto !important;
         z-index: 899 !important;
@@ -2969,7 +2978,7 @@ function createUiapConfigLauncher() {
             ["DIM_INCOMPLETE_PI_CODE", "checkbox", "Dim incomplete PI", "Dims PI when it contains question marks."],
             ["PANEL_STYLE_EFFECT", "select", "Panel style effect", "Panel edge style preset.", [["0","Disabled"],["1","Style 1"],["2","Style 2"],["3","Style 3"]]],
             ["PANEL_STYLE_EFFECT_SIGNAL_PANEL", "checkbox", "Signal panel style", "Applies panel style effect to signal panel."],
-            ["VOLUME_PERCENTAGE_TOAST", "checkbox", "Volume toast", "Shows toast when volume changes."]
+            ["VOLUME_PERCENTAGE_TOAST", "checkbox", "Volume toast", "Displays toast when volume changes."]
           ],
           rds: [
             ["RDS_ICON_STYLE", "checkbox", "Enable UI Addon Icons Style", "Enables RDS, PTY, TP, TA icons."],
@@ -3001,10 +3010,9 @@ function createUiapConfigLauncher() {
             ["MULTIPATH_ATTACH_TO", "select", "Multipath attach to", "Target icon for multipath indicator.", [["STEREO","STEREO"],["PTY","PTY"],["MS","MS"],["ECC","ECC"],["TP","TP"],["TA","TA"],["RDS","RDS"]]],
             ["MULTIPATH_LEFT_PADDING", "number", "Multipath left padding", "Spacing when not attached to Stereo/Mono."],
             ["MULTIPATH_DISPLAY_MODE", "select", "Multipath display mode", "Icon, text, or both.", [["ICON","ICON"],["TEXT","TEXT"],["BOTH","BOTH"]]],
-            ["MULTIPATH_SHOW_RF_MP_TEXT", "checkbox", "Show RF/MP text", "Adds RF/MP text near multipath indicator."],
             ["IS_TEF_RADIO", "checkbox", "TEF radio mode", "Uses TEF radio MP assumption."],
-            ["METRICS_MONITOR_PLUGIN_IS_INSTALLED", "checkbox", "Metrics Monitor installed", "Compatibility flag."],
-            ["IS_VISUALEQ_PLUGIN_ENALBED", "checkbox", "VisualEQ enabled", "Compatibility flag; original upstream spelling kept."],
+            ["METRICS_MONITOR_PLUGIN_IS_INSTALLED", "checkbox", "Metrics Monitor installed", "Enable if Metrics Monitor plugin is installed."],
+            ["IS_VISUALEQ_PLUGIN_ENABLED", "checkbox", "VisualEQ enabled", "Enable if VisualEQ plugin is installed."],
             ["BANDWIDTH_UPDATE_INTERVAL", "number", "Bandwidth update interval", "Milliseconds."],
             ["LED_GLOW_EFFECT_ICONS_RDS_ICON_STYLE_PTY", "checkbox", "PTY icon glow", "Glow effect for PTY RDS icon style."],
             ["LED_GLOW_EFFECT_ICONS_RDS_ICON_STYLE_MS", "checkbox", "MS icon glow", "Glow effect for MS RDS icon style."],
@@ -4306,7 +4314,7 @@ if (HIDE_MOBILE_TRAY && !MOVE_MOBILE_TRAY_TO_TOP) {
 if (MOBILE_STATUS_BAR) {
 uiapeOnDomReady(function () {
     function moveButtons() {
-        if (MOBILE_STATUS_BAR_CONNECTION && /Mobi|Android/i.test(navigator.userAgent) && window.matchMedia("(orientation: landscape)").matches) mobileStatusBarConnection(true);
+        if (MOBILE_STATUS_BAR_CONNECTION && /Mobi|Android/i.test(navigator.userAgent) && window.matchMedia("(orientation: landscape)").matches && uiapeMobileStatusBarConnectionFn) uiapeMobileStatusBarConnectionFn(true);
 
         const wrapper = document.querySelector('.wrapper-outer.dashboard-panel');
         const pluginContent = document.querySelector('.dashboard-panel-plugin-content');
@@ -4329,9 +4337,9 @@ uiapeOnDomReady(function () {
 
                 // Move buttons into new div in order from left to right
                 if (streamSignalMeter) buttonContainer.appendChild(streamSignalMeter);
-                if (usersOnlineContainer) buttonContainer.appendChild(usersOnlineContainer);
-                if (chatButton) buttonContainer.appendChild(chatButton); 
-                if (settingsButton) buttonContainer.appendChild(settingsButton); 
+                if (usersOnlineContainer && MOBILE_STATUS_BAR_SHOW_USERS) buttonContainer.appendChild(usersOnlineContainer);
+                if (chatButton) buttonContainer.appendChild(chatButton);
+                if (settingsButton) buttonContainer.appendChild(settingsButton);
 
                 buttonContainer.style.position = "fixed";
                 buttonContainer.style.top = "0";
@@ -4349,7 +4357,7 @@ uiapeOnDomReady(function () {
                 buttonContainer.style.margin = "0";
                 buttonContainer.style.whiteSpace = "nowrap";
 
-                const elements = [chatButton, usersOnlineContainer, streamSignalMeter, settingsButton];
+                const elements = [chatButton, MOBILE_STATUS_BAR_SHOW_USERS ? usersOnlineContainer : null, streamSignalMeter, settingsButton];
                 elements.forEach(element => {
                     if (element) {
                         element.style.margin = "0px 16px 0px 16px";
@@ -4383,13 +4391,13 @@ uiapeOnDomReady(function () {
                 if (pluginContent) {
                     if (settingsButton) pluginContent.after(settingsButton);
                     if (chatButton) pluginContent.after(chatButton);
-                    if (usersOnlineContainer) pluginContent.after(usersOnlineContainer);
+                    if (usersOnlineContainer && MOBILE_STATUS_BAR_SHOW_USERS) pluginContent.after(usersOnlineContainer);
                     if (streamSignalMeter) pluginContent.after(streamSignalMeter);
                 }
 
                 buttonContainer.remove();
 
-                const elements = [chatButton, usersOnlineContainer, streamSignalMeter, settingsButton];
+                const elements = [chatButton, MOBILE_STATUS_BAR_SHOW_USERS ? usersOnlineContainer : null, streamSignalMeter, settingsButton];
                 elements.forEach(element => {
                     if (element) {
                         element.style.position = '';
@@ -4442,8 +4450,8 @@ setInterval(function() {
 }, 5000);
 
 // ### ALWAYS SHOW USERS ONLINE ON MOBILE DEVICES ### //
-
-if (/Mobi|Android/i.test(navigator.userAgent) && !window.matchMedia("(orientation: landscape)").matches) {
+// Skipped when MOBILE_STATUS_BAR is also on - moveButtons() then owns positioning this element instead, to avoid both fighting over position/top/right.
+if (!MOBILE_STATUS_BAR && /Mobi|Android/i.test(navigator.userAgent) && !window.matchMedia("(orientation: landscape)").matches) {
     let styleElementUsers = document.createElement('style');
         styleElementUsers.textContent = `
         .wrapper-outer.dashboard-panel {
@@ -4455,12 +4463,14 @@ if (/Mobi|Android/i.test(navigator.userAgent) && !window.matchMedia("(orientatio
     // Show online users on mobile
     if (window.innerWidth < 924) {
         let element = document.querySelector(".users-online-container") || document.getElementById('users-online-container');
-        element.classList.replace('hide-phone', 'show-phone');
-        element.style.display = 'block';
-        element.style.position = 'fixed';
-        element.style.top = '-40px';
-        element.style.right = '0px';
-        element.style.color = 'var(--color-text)';
+        if (element) {
+            element.classList.replace('hide-phone', 'show-phone');
+            element.style.display = 'block';
+            element.style.position = 'fixed';
+            element.style.top = '-40px';
+            element.style.right = '0px';
+            element.style.color = 'var(--color-text)';
+        }
     }
 }
 }
@@ -4707,7 +4717,25 @@ function mobileStatusBarConnection(force) {
     }
 }
 
+// Exposes mobileStatusBarConnection to moveButtons().
+uiapeMobileStatusBarConnectionFn = mobileStatusBarConnection;
+
 mobileStatusBarConnection();
+
+// #stream-signal-meter needs to end up inside the status bar.
+if (MOBILE_STATUS_BAR) {
+    const uiapeExistingBar = document.querySelector("#button-container");
+    const uiapeMeterEl = document.getElementById("stream-signal-meter");
+    if (uiapeExistingBar && uiapeMeterEl) {
+        uiapeExistingBar.insertBefore(uiapeMeterEl, uiapeExistingBar.firstChild);
+        uiapeMeterEl.style.margin = "0px 16px 0px 16px";
+        uiapeMeterEl.style.verticalAlign = "top";
+        uiapeMeterEl.style.position = "static";
+        uiapeMeterEl.style.whiteSpace = "nowrap";
+        uiapeMeterEl.style.color = "var(--color-text)";
+        uiapeMeterEl.style.display = "block";
+    }
+}
 }
 
 // #################### USER NOTICE FOR MULTIPLE USERS ONLINE #################### //
@@ -5047,10 +5075,10 @@ function addRandomIcon(result) {
 
     const iconSpan = document.createElement('span');
     iconSpan.classList.add('multipath-container');
-    if (!cfg.METRICS_MONITOR_PLUGIN_IS_INSTALLED) {
-        iconSpan.style.marginLeft = `${!cfg.IS_VISUALEQ_PLUGIN_ENALBED && (cfg.RDS_ICON_STYLE || isRdsStyleMode) ? cfg.MULTIPATH_LEFT_PADDING : 8}px`;
-        iconSpan.style.marginTop = `${!cfg.IS_VISUALEQ_PLUGIN_ENALBED && (cfg.RDS_ICON_STYLE || isRdsStyleMode) ? 0 : 2}px`;
-    }
+    //if (!cfg.METRICS_MONITOR_PLUGIN_IS_INSTALLED) {
+        iconSpan.style.marginLeft = `${!cfg.IS_VISUALEQ_PLUGIN_ENABLED && (cfg.RDS_ICON_STYLE || isRdsStyleMode) ? cfg.MULTIPATH_LEFT_PADDING : 8}px`;
+        iconSpan.style.marginTop = `${!cfg.IS_VISUALEQ_PLUGIN_ENABLED && (cfg.RDS_ICON_STYLE || isRdsStyleMode) ? 0 : 2}px`;
+    //}
     iconSpan.style.verticalAlign = 'middle';
     iconSpan.style.fontSize = '16px';
     iconSpan.style.position = 'relative';
@@ -5080,7 +5108,7 @@ function addRandomIcon(result) {
 
     const displayMode = String(cfg.MULTIPATH_DISPLAY_MODE || "ICON").toUpperCase();
     const showMultipathIcon = displayMode !== "TEXT";
-    const showMultipathText = cfg.MULTIPATH_SHOW_RF_MP_TEXT && displayMode !== "ICON";
+    const showMultipathText = displayMode !== "ICON";
 
     const signalText = (Number.isFinite(uiapeMultipathSig) && uiapeMultipathSigDisplay !== "") ? uiapeMultipathSigDisplay : "-";
     const multipathText = uiapeMultipathTooltipSigRaw || "-";
@@ -5549,6 +5577,7 @@ style.innerHTML = `
   flex-direction: column;
   gap: 1px;
   margin-left: 4px;
+  margin-bottom: 4px;
   width: 46px;
   min-width: 46px;
   line-height: 1;
@@ -5559,6 +5588,10 @@ style.innerHTML = `
   align-items: flex-start;
   text-align: left;
   white-space: nowrap;
+}
+
+.multipath-rfmp-text span {
+    font-size: 105%;
 }
 
 #signalPanel.compact-meters #signal-icons img.status-icon {
