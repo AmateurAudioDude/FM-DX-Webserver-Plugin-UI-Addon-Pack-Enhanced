@@ -5157,6 +5157,7 @@ let onScreenTimerDelay = TUNE_DELAY_IF_MORE_THAN_ONE_USER;
 let showIcon = !!onScreenTimerDelay;
 let displayIcon = true;
 let lockTuning;
+let lockIconTimeoutId = null; // lets userUnlockTuning cancel a pending icon-insert before it fires
 
 uiapeOnDomReady(() => {
     if (uiapeDetectAdminSession()) return;
@@ -5210,7 +5211,7 @@ uiapeOnDomReady(() => {
         if (lockIcon) panel.removeChild(lockIcon);
 
         const lockIconHTML = '<i style="padding: 10px 6px 12px 6px; font-size: 18px; color: var(--color-4);" class="fa-solid fa-lock pointer user-requests-lock" aria-label="Tuner is currently locked."></i>';
-        setTimeout(() => {
+        lockIconTimeoutId = setTimeout(() => {
             if (displayIcon) tunerName.insertAdjacentHTML('afterend', lockIconHTML);
             displayIcon = false; // prevent double display
         }, (TUNE_DELAY * 1000) + 1000);
@@ -5274,6 +5275,8 @@ uiapeOnDomReady(() => {
     userLockTuning();
 
     function userUnlockTuning(tuneDelay) {
+      // Cancel the pending lock-icon insert immediately - it's fixed to page-load time and can otherwise still fire after this unlock is already decided.
+      clearTimeout(lockIconTimeoutId);
       setTimeout(() => {
         lockTuning = false;
 
