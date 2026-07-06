@@ -226,7 +226,8 @@ const UIAPE_LIVE_CSS_KEYS = new Set([
   "APPLY_STEREO_ICON_GLOW_WITH_MISSING_RDS",
   "STEREO_ICON_SCALE",
   "STEREO_ICON_WIDTH",
-  "RDS_INDICATOR_ICON_TYPE"
+  "RDS_INDICATOR_ICON_TYPE",
+  "MULTIPATH_TEXT_SIZE"
 ]);
 
 // Live-preview state. Populated during load and while the panel is used.
@@ -234,6 +235,7 @@ let uiapeLiveStyleElement = null;              // dedicated <style> holding all 
 let uiapeRebuildRdsIconPanel = null;           // set inside the RDS/Stereo icons block, if it runs
 let uiapeReapplyMultipathIndicator = null;     // set inside the multipath indicator block, if it runs
 let uiapeMobileStatusBarConnectionFn = null;   // set inside the MOBILE_STATUS_BAR_CONNECTION block, so moveButtons() (a sibling block) can call it
+let uiapeRenderAllControlsFn = null;           // set inside attachLauncher, so saveUiapConfig (a sibling top-level function) can refresh reset-button visibility right after saving
 
 // Parse-time position marker: our styles insert before this, so later plugin CSS (e.g. Metrics Monitor) wins cascade ties exactly as it does against the original synchronous plugin.
 const uiapeStyleAnchor = document.createElement('style');
@@ -374,6 +376,7 @@ const UIAPE_DEFAULT_CONFIG = {
   MULTIPATH_ATTACH_TO: "STEREO",
   MULTIPATH_LEFT_PADDING: -8,
   MULTIPATH_DISPLAY_MODE: "BOTH",
+  MULTIPATH_TEXT_SIZE: 105,
   IS_TEF_RADIO: false,
 
   TUNE_DELAY_ENABLE: false,
@@ -406,7 +409,7 @@ const UIAPE_DEFAULT_CONFIG = {
 
   STEREO_ICON_COLOR: "default",
   STEREO_ICON_COLOR_OFF: "",
-  STEREO_ICON_SCALE: "100%",
+  STEREO_ICON_SCALE: 100,
 
   PANEL_STYLE_EFFECT: 0,
   PANEL_STYLE_EFFECT_SIGNAL_PANEL: false,
@@ -417,7 +420,7 @@ const UIAPE_DEFAULT_CONFIG = {
   IS_VISUALEQ_PLUGIN_ENABLED: false,
 
   RDS_ICON_PRESET: 1,
-  RDS_ICON_SCALE: "100%",
+  RDS_ICON_SCALE: 100,
   STEREO_ICON_WIDTH: 2,
   RDS_ICON_STYLE_MS_OFF_AS_LETTERS: false,
 
@@ -456,6 +459,8 @@ const UIAPE_DEFAULT_CONFIG = {
       TP_TA_GAP: 8,
       MS_TOP_PADDING: 7,
       STEREO_ICON_SPACING: 1,
+      ECC_ICON_SPACING: 0,
+      ECC_FLAG_SPACING: 4,
       PTY_HEIGHT: 20,
       MS_HEIGHT_MODE: "PTY",
       MS_HEIGHT: 20,
@@ -463,6 +468,8 @@ const UIAPE_DEFAULT_CONFIG = {
       TP_HEIGHT: 20,
       TA_HEIGHT_MODE: "PTY",
       TA_HEIGHT: 20,
+      ECC_HEIGHT_MODE: "CUSTOM",
+      ECC_HEIGHT: 17,
       BW_MARGIN_LEFT: -6,
       GAP_ROW_1: 1,
       GAP_ROW_2: 6
@@ -475,6 +482,8 @@ const UIAPE_DEFAULT_CONFIG = {
       TP_TA_GAP: 8,
       MS_TOP_PADDING: 7,
       STEREO_ICON_SPACING: 1,
+      ECC_ICON_SPACING: 0,
+      ECC_FLAG_SPACING: 4,
       PTY_HEIGHT: 20,
       MS_HEIGHT_MODE: "PTY",
       MS_HEIGHT: 20,
@@ -482,6 +491,8 @@ const UIAPE_DEFAULT_CONFIG = {
       TP_HEIGHT: 20,
       TA_HEIGHT_MODE: "PTY",
       TA_HEIGHT: 20,
+      ECC_HEIGHT_MODE: "CUSTOM",
+      ECC_HEIGHT: 17,
       BW_MARGIN_LEFT: -6,
       GAP_ROW_1: 1,
       GAP_ROW_2: 6
@@ -494,6 +505,8 @@ const UIAPE_DEFAULT_CONFIG = {
       TP_TA_GAP: 8,
       MS_TOP_PADDING: 7,
       STEREO_ICON_SPACING: 6,
+      ECC_ICON_SPACING: 0,
+      ECC_FLAG_SPACING: 4,
       PTY_HEIGHT: 17,
       MS_HEIGHT_MODE: "PTY",
       MS_HEIGHT: 17,
@@ -501,6 +514,8 @@ const UIAPE_DEFAULT_CONFIG = {
       TP_HEIGHT: 17,
       TA_HEIGHT_MODE: "PTY",
       TA_HEIGHT: 17,
+      ECC_HEIGHT_MODE: "CUSTOM",
+      ECC_HEIGHT: 17,
       BW_MARGIN_LEFT: -6,
       GAP_ROW_1: -6,
       GAP_ROW_2: 0
@@ -513,6 +528,8 @@ const UIAPE_DEFAULT_CONFIG = {
       TP_TA_GAP: 8,
       MS_TOP_PADDING: 9,
       STEREO_ICON_SPACING: 1,
+      ECC_ICON_SPACING: 0,
+      ECC_FLAG_SPACING: 4,
       PTY_HEIGHT: 20,
       MS_HEIGHT_MODE: "PTY",
       MS_HEIGHT: 20,
@@ -520,6 +537,8 @@ const UIAPE_DEFAULT_CONFIG = {
       TP_HEIGHT: 20,
       TA_HEIGHT_MODE: "PTY",
       TA_HEIGHT: 20,
+      ECC_HEIGHT_MODE: "CUSTOM",
+      ECC_HEIGHT: 17,
       BW_MARGIN_LEFT: -6,
       GAP_ROW_1: 1,
       GAP_ROW_2: 6
@@ -548,12 +567,9 @@ const UIAPE_DEFAULT_CONFIG = {
   // Which settings are hidden from non-admin users in the config panel. Admin-editable
   // per-setting via the "Admin only" checkbox next to each control - see
   // uiapeIsControlVisibleForCurrentUser() and the "uiapeAdminOnlyKey" change handler.
+  // Ordered to follow the config panel's own section/field order (core, mobile, tuning,
+  // rds) purely for readability when auditing this list - has no effect on behavior.
   ADMIN_ONLY_KEYS: [
-    "RDS_ICON_STYLE_REMOVE_RDS_ICON",
-    "LED_GLOW_EFFECT_ICONS_METRICS_MONITOR_PLUGIN",
-    "REPLACE_MPX_LOGO_WITH_STEREO_LOGO_METRICS_MONITOR_PLUGIN",
-    "DEFAULT_SIGNAL_UNIT",
-    "BANDWIDTH_UPDATE_INTERVAL",
     "BUTTON_FM_LIST_MOD_MINIMUM_HIDE_DISTANCE",
     "RELOAD_BAN_WARNING",
     "RELOAD_BAN_WARNING_MESSAGE",
@@ -564,9 +580,14 @@ const UIAPE_DEFAULT_CONFIG = {
     "TUNE_DELAY_ENABLE",
     "TUNE_DELAY",
     "TUNE_DELAY_IF_MORE_THAN_ONE_USER",
+    "DEFAULT_SIGNAL_UNIT",
     "IS_TEF_RADIO",
     "METRICS_MONITOR_PLUGIN_IS_INSTALLED",
-    "IS_VISUALEQ_PLUGIN_ENABLED"
+    "IS_VISUALEQ_PLUGIN_ENABLED",
+    "RDS_ICON_STYLE_REMOVE_RDS_ICON",
+    "BANDWIDTH_UPDATE_INTERVAL",
+    "LED_GLOW_EFFECT_ICONS_METRICS_MONITOR_PLUGIN",
+    "REPLACE_MPX_LOGO_WITH_STEREO_LOGO_METRICS_MONITOR_PLUGIN"
   ],
   // Tracks which keys this saved profile has already been reconciled against (see
   // uiapeReconcileAdminOnlyKeys()). Lets a later plugin update add a new key to the
@@ -615,6 +636,14 @@ function uiapeNormalizeConfig(config) {
   merged.ADMIN_ONLY_KEYS = reconciledAdminOnly.keys;
   merged.ADMIN_ONLY_KEYS_SEEN = reconciledAdminOnly.seen;
 
+  // Migrates configs saved before these became plain numeric percentages.
+  ["STEREO_ICON_SCALE", "RDS_ICON_SCALE"].forEach(key => {
+    if (typeof merged[key] === "string") {
+      const parsed = parseFloat(merged[key]);
+      merged[key] = Number.isFinite(parsed) ? parsed : UIAPE_DEFAULT_CONFIG[key];
+    }
+  });
+
   return merged;
 }
 
@@ -644,6 +673,19 @@ function uiapeOnDomReady(callback) {
   } else {
     callback();
   }
+}
+
+// Coalesces bursts of calls.
+function uiapeDebounceRaf(fn) {
+  let scheduled = false;
+  return (...args) => {
+    if (scheduled) return;
+    scheduled = true;
+    requestAnimationFrame(() => {
+      scheduled = false;
+      fn(...args);
+    });
+  };
 }
 
 /*
@@ -787,6 +829,8 @@ async function saveUiapConfig() {
   uiapeUpdateReloadNotice();
   markUiapConfigClean("Saved");
 
+  if (uiapeRenderAllControlsFn) uiapeRenderAllControlsFn();
+
   if (needsReload) {
     const reloadCfg = getUiapPanelConfig();
     const reloadBanWarningLine = reloadCfg.RELOAD_BAN_WARNING && reloadCfg.RELOAD_BAN_WARNING_MESSAGE
@@ -823,6 +867,31 @@ function updateUiapConfig(key, value) {
 
 function uiapeValuesEqual(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
+}
+
+// "Default" for the reset-to-default button means the site's actual saved baseline (admin's
+// server config, or this user's own last save).
+function uiapeBaselineValue(key) {
+  const baseline = UIAPE_SAVED_BASELINE || UIAPE_DEFAULT_CONFIG;
+  return key in baseline ? baseline[key] : UIAPE_DEFAULT_CONFIG[key];
+}
+
+function uiapeBaselinePresetValue(key) {
+  const baselineUser = (UIAPE_SAVED_BASELINE || UIAPE_DEFAULT_CONFIG).RDS_ICON_STYLE_PRESETS?.user;
+  return baselineUser && key in baselineUser ? baselineUser[key] : UIAPE_DEFAULT_CONFIG.RDS_ICON_STYLE_PRESETS.user[key];
+}
+
+// Track this user's own last-saved config, which can itself
+// already diverge from what the admin currently has configured.
+function uiapeAdminConfigValue(key) {
+  const adminConfig = uiapeNormalizeConfig(readUiapAdminConfig());
+  return adminConfig[key];
+}
+
+function uiapeAdminPresetValue(key) {
+  const adminConfig = uiapeNormalizeConfig(readUiapAdminConfig());
+  const adminUser = adminConfig.RDS_ICON_STYLE_PRESETS?.user;
+  return adminUser ? adminUser[key] : UIAPE_DEFAULT_CONFIG.RDS_ICON_STYLE_PRESETS.user[key];
 }
 
 // Rebuild the live-CSS style element from the current draft config.
@@ -1298,7 +1367,7 @@ function uiapeBuildLiveCss(cfg) {
   }
 
   // RDS icon scale located here to decouple from "Metrics icon glow" for Metrics Monitor.
-  if (!cfg.IS_VISUALEQ_PLUGIN_ENABLED && window.innerWidth > 360 && cfg.RDS_ICON_SCALE !== "100%") {
+  if (!cfg.IS_VISUALEQ_PLUGIN_ENABLED && window.innerWidth > 360 && parseFloat(cfg.RDS_ICON_SCALE) !== 100) {
     css += `
 #signalPanel > *:where(:not(#uiape-config-gear, #uiape-config-panel)) {
     transform: scale(${uiapeCssScaleValue(cfg.RDS_ICON_SCALE)});
@@ -1451,6 +1520,32 @@ ${cfg.RDS_ICON_STYLE ? `
 ` : ''}
 `;
   }
+
+/* Multipath text mode sizing */
+  css += `
+#signal-icons .multipath-rfmp-text,
+.multipath-container .multipath-rfmp-text {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-left: 4px;
+  margin-bottom: 2px;
+  width: 46px;
+  min-width: 46px;
+  line-height: 1;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0;
+  vertical-align: middle;
+  align-items: flex-start;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.multipath-rfmp-text span {
+  font-size: ${Number.isFinite(Number(cfg.MULTIPATH_TEXT_SIZE)) ? Number(cfg.MULTIPATH_TEXT_SIZE) : 105}%;
+}
+`;
 
   return css;
 }
@@ -1701,7 +1796,9 @@ function installUiapNativeEnableToggle() {
     tryInstall();
   }
 
-  const observer = new MutationObserver(tryInstall);
+  // Debounced: watches the whole page for any added/removed node, so it can otherwise
+  // fire far more often than needed for a check this cheap to just cap at once per frame.
+  const observer = new MutationObserver(uiapeDebounceRaf(tryInstall));
   observer.observe(document.body, { childList: true, subtree: true });
 }
 
@@ -1816,6 +1913,8 @@ const MULTIPATH_LEFT_PADDING = UIAPE_CONFIG.MULTIPATH_LEFT_PADDING;
 // Multipath display mode.
 // Options: "ICON", "TEXT", "BOTH".
 const MULTIPATH_DISPLAY_MODE = UIAPE_CONFIG.MULTIPATH_DISPLAY_MODE;
+// Font size (px) for the multipath RF/MP text (text/both display modes). Read live from config in uiapeBuildLiveCss.
+const MULTIPATH_TEXT_SIZE = UIAPE_CONFIG.MULTIPATH_TEXT_SIZE;
 // Set to true if using a TEF radio or false if using a TEF module. Based on the assumption TEF radio MP peaks around 40%.
 const IS_TEF_RADIO = UIAPE_CONFIG.IS_TEF_RADIO;
 // #################### NEW USER TUNING DELAY #################### //
@@ -1888,19 +1987,17 @@ const RDS_ICON_PRESET = UIAPE_CONFIG.RDS_ICON_PRESET;
 // RDS/stereo icon sizes are read live from config in uiapeBuildLiveCss.
 
 function uiapeCssScaleValue(value, factor = 1) {
-  const raw = typeof value === "string" ? value.trim() : value;
-  let numeric = 1;
-
-  if (typeof raw === "string" && raw.endsWith("%")) {
-    numeric = parseFloat(raw) / 100;
-  } else {
-    numeric = parseFloat(raw);
-  }
-
-  if (!Number.isFinite(numeric) || numeric <= 0) numeric = 1;
-  const scaled = numeric * factor;
+  // parseFloat handles a legacy "100%" string and a plain number identically.
+  let percent = parseFloat(value);
+  if (!Number.isFinite(percent) || percent <= 0) percent = 100;
+  const scaled = (percent / 100) * factor;
   return Number(scaled.toFixed(4)).toString();
 }
+
+// Fixed total width the ECC flag icon must occupy (flag width + this) so eccWrapper matches
+// the no-ECC placeholder's width and later row icons never shift. ECC_FLAG_SPACING only
+// controls how that fixed amount splits between left-inset and right-trailing space.
+const UIAPE_ECC_FLAG_RESERVED_WIDTH = 5.25;
 
 // Resolves the active RDS_ICON_STYLE_PRESETS entry from a (possibly live) config
 // object. Kept separate from the RDS/Stereo icons block's own preset resolution
@@ -2113,8 +2210,8 @@ function createUiapConfigLauncher() {
         left: auto !important;
         bottom: auto !important;
         transform: none !important;
-        width: 26px;
-        height: 26px;
+        width: 24px;
+        height: 24px;
         border-radius: 50%;
         border: 1px solid color-mix(in srgb, var(--color-4, #888) 62%, transparent);
         background: var(--color-2);
@@ -2131,7 +2228,7 @@ function createUiapConfigLauncher() {
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 14px;
+        font-size: 16px;
         line-height: 1;
         padding: 0;
       }
@@ -2141,6 +2238,15 @@ function createUiapConfigLauncher() {
       .uiape-config-host.uiape-config-open > #uiape-config-gear {
         opacity: 1 !important;
         pointer-events: auto !important;
+      }
+
+      /* :hover never triggers on touch devices, so hover-to-reveal would leave the gear
+         undiscoverable and unclickable there. */
+      @media (hover: none) {
+        .uiape-config-host > #uiape-config-gear {
+          opacity: 1 !important;
+          pointer-events: auto !important;
+        }
       }
 
       #uiape-config-gear:hover {
@@ -2227,7 +2333,9 @@ function createUiapConfigLauncher() {
         align-items: center;
         justify-content: space-between;
         gap: 8px;
-        min-height: 36px;
+        height: 46px;
+        flex: 0 0 auto;
+        box-sizing: border-box;
         padding: 8px 10px 8px 12px;
         border-bottom: 1px solid color-mix(in srgb, var(--color-4, #888) 26%, transparent);
         background:
@@ -2278,6 +2386,24 @@ function createUiapConfigLauncher() {
 
       .uiape-config-close:hover {
         background: color-mix(in srgb, var(--color-4) 20%, var(--color-3));
+      }
+
+      .uiape-config-search {
+        flex: 0 0 auto;
+        padding: 8px 12px;
+        border-bottom: 1px solid color-mix(in srgb, var(--color-4, #888) 20%, transparent);
+      }
+
+      .uiape-config-search input {
+        width: 100%;
+        box-sizing: border-box;
+        border: 1px solid color-mix(in srgb, var(--color-4, #888) 32%, transparent);
+        border-radius: 8px;
+        background: color-mix(in srgb, var(--color-2, #222) 74%, black);
+        color: inherit;
+        padding: 6px 9px;
+        font-size: 12px;
+        min-height: 32px;
       }
 
       .uiape-config-body {
@@ -2340,6 +2466,17 @@ function createUiapConfigLauncher() {
         line-height: 1.2;
       }
 
+      /* Passive "differs from admin" marker. */
+      .uiape-config-label strong .uiape-admin-diff-dot {
+        display: inline-block;
+        width: 4px;
+        height: 4px;
+        margin: 0 0 4px 4px;
+        border-radius: 50%;
+        background: var(--color-main-bright, #4da3ff);
+        vertical-align: middle;
+      }
+
       .uiape-config-label span {
         display: block;
         margin-top: 2px;
@@ -2371,6 +2508,7 @@ function createUiapConfigLauncher() {
       .uiape-config-control {
         min-width: 116px;
         display: flex;
+        align-items: center;
         justify-content: flex-end;
         text-align: left !important;
       }
@@ -2386,6 +2524,8 @@ function createUiapConfigLauncher() {
         color: inherit;
         padding: 5px 7px;
         font-size: 12px;
+        min-height: 0;
+        max-height: 32px;
       }
 
       .uiape-config-control input[type="checkbox"] {
@@ -2394,7 +2534,41 @@ function createUiapConfigLauncher() {
         accent-color: var(--color-main-bright, var(--color-4));
       }
 
+      .uiape-reset-default {
+        flex: 0 0 auto;
+        width: 20px;
+        height: 20px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid color-mix(in srgb, var(--color-4, #888) 30%, transparent);
+        border-radius: 50%;
+        background: transparent;
+        color: color-mix(in srgb, var(--color-4, #888) 70%, transparent);
+        cursor: pointer;
+        font-size: 16px;
+        line-height: 1;
+        padding: 0;
+        transform: translate(var(--uiape-reset-x, -8px), var(--uiape-reset-y, 0px));
+      }
 
+      /* Checkbox rows */
+      .uiape-config-control:has(input[type="checkbox"]) .uiape-reset-default {
+        --uiape-reset-x: -8px;
+        --uiape-reset-y: 0px;
+      }
+
+      /* Non-checkbox rows  */
+      .uiape-config-control:not(:has(input[type="checkbox"])) .uiape-reset-default {
+        --uiape-reset-x: -12px;
+        --uiape-reset-y: 0px;
+      }
+
+      .uiape-reset-default:hover {
+        border-color: var(--color-4, #888);
+        color: var(--color-4, #888);
+        background: color-mix(in srgb, var(--color-4, #888) 14%, transparent);
+      }
 
       .uiape-config-control-wide {
         display: block;
@@ -2692,8 +2866,10 @@ function createUiapConfigLauncher() {
         const gear = document.createElement("button");
         gear.id = "uiape-config-gear";
         gear.type = "button";
-        gear.title = "UI Add-on settings";
+        gear.classList.add("tooltip");
+        gear.setAttribute("data-tooltip", "UI Add-on settings");
         gear.textContent = "\u2699";
+
 
         const panel = document.createElement("div");
         panel.id = "uiape-config-panel";
@@ -2705,6 +2881,9 @@ function createUiapConfigLauncher() {
               <div class="uiape-config-muted">Configuration panel \u00B7 v${pluginVersion}</div>
             </div>
             <button type="button" class="uiape-config-close" aria-label="Close">\u2715</button>
+          </div>
+          <div class="uiape-config-search">
+            <input type="text" id="uiape-config-search-input" placeholder="Search settings\u2026" aria-label="Search settings" autocomplete="off">
           </div>
           <div class="uiape-config-body">
             <div class="uiape-config-section">
@@ -2766,8 +2945,29 @@ function createUiapConfigLauncher() {
           }
         }
 
+        const UIAPE_PANEL_POSITION_STORAGE_KEY = "uiape-config-panel-position";
+
+        function saveUiapPanelPosition() {
+          const rect = panel.getBoundingClientRect();
+          try {
+            localStorage.setItem(UIAPE_PANEL_POSITION_STORAGE_KEY, JSON.stringify({ left: rect.left, top: rect.top }));
+          } catch (e) {}
+        }
+
         function resetUiapPanelPositionIfUnset() {
-          if (!panel.style.left && !panel.style.top) {
+          if (panel.style.left || panel.style.top) return;
+
+          let saved = null;
+          try {
+            saved = JSON.parse(localStorage.getItem(UIAPE_PANEL_POSITION_STORAGE_KEY));
+          } catch (e) {}
+
+          if (saved && Number.isFinite(saved.left) && Number.isFinite(saved.top)) {
+            panel.style.left = `${saved.left}px`;
+            panel.style.top = `${saved.top}px`;
+            panel.style.right = "auto";
+            panel.style.bottom = "auto";
+          } else {
             panel.style.right = "12px";
             panel.style.bottom = "12px";
             panel.style.left = "auto";
@@ -2858,6 +3058,7 @@ function createUiapConfigLauncher() {
             panel.classList.remove("uiape-dragging");
             header.releasePointerCapture?.(event.pointerId);
             clampUiapPanelToViewport();
+            saveUiapPanelPosition();
           };
 
           header.addEventListener("pointerup", stopDrag);
@@ -2878,7 +3079,11 @@ function createUiapConfigLauncher() {
         }
 
         updateUiapNativeModalState();
-        const nativeModalObserver = new MutationObserver(updateUiapNativeModalState);
+        // Debounced: this watches the whole page for class/style changes, and its own callback
+        // forces a reflow (getComputedStyle/getBoundingClientRect) - on a page with frequent
+        // unrelated class/style churn (RDS updates, other plugins, etc.) that could otherwise
+        // run the expensive check far more often than once per frame.
+        const nativeModalObserver = new MutationObserver(uiapeDebounceRaf(updateUiapNativeModalState));
         nativeModalObserver.observe(document.body, { attributes: true, childList: true, subtree: true, attributeFilter: ["class", "style"] });
 
         const UIAPE_COLOR_KEYS = new Set([
@@ -2919,6 +3124,8 @@ function createUiapConfigLauncher() {
           ["TP_TA_GAP", "number", "TP / TA gap", "Special gap between TP and TA."],
           ["MS_TOP_PADDING", "number", "MS top padding", "Vertical alignment for MS."],
           ["STEREO_ICON_SPACING", "number", "Stereo icon spacing", "Spacing around Stereo icon."],
+          ["ECC_ICON_SPACING", "number", "ECC icon spacing", "Spacing around ECC icon."],
+          ["ECC_FLAG_SPACING", "number", "ECC flag spacing", "Left inset of the flag icon within its fixed-width slot. Doesn't affect later icons' position."],
           ["PTY_HEIGHT", "number", "PTY height", "PTY indicator height."],
           ["MS_HEIGHT_MODE", "select", "MS height mode", "Follow PTY or use custom height.", [["PTY","Follow PTY"],["CUSTOM","Custom height"]]],
           ["MS_HEIGHT", "number", "MS custom height", "Used only when MS height mode is Custom."],
@@ -2926,6 +3133,8 @@ function createUiapConfigLauncher() {
           ["TP_HEIGHT", "number", "TP custom height", "Used only when TP height mode is Custom."],
           ["TA_HEIGHT_MODE", "select", "TA height mode", "Follow PTY or use custom height.", [["PTY","Follow PTY"],["CUSTOM","Custom height"]]],
           ["TA_HEIGHT", "number", "TA custom height", "Used only when TA height mode is Custom."],
+          ["ECC_HEIGHT_MODE", "select", "ECC height mode", "Follow PTY or use custom height.", [["PTY","Follow PTY"],["CUSTOM","Custom height"]]],
+          ["ECC_HEIGHT", "number", "ECC custom height", "Used only when ECC height mode is Custom. Only affects the 'no ECC data' placeholder box, not the flag icon."],
           ["BW_MARGIN_LEFT", "number", "BW margin left", "Bandwidth left offset."],
           ["GAP_ROW_1", "number", "Row 1 vertical gap", "Preset row 1 vertical adjustment."],
           ["GAP_ROW_2", "number", "Row 2 vertical gap", "Preset row 2 vertical adjustment."]
@@ -2936,8 +3145,8 @@ function createUiapConfigLauncher() {
         const uiapeControlSections = {
           core: [
             ["CANVAS_FADE_EFFECT", "checkbox", "Canvas fade effect", "Fade in the signal graph on page load."],
-            ["RELOAD_BAN_WARNING", "checkbox", "Reload ban warning", "Shows a warning message in the save/reload prompt."],
-            ["RELOAD_BAN_WARNING_MESSAGE", "text", "Reload ban warning message", "Shown in the save/reload prompt when the warning above is enabled."],
+            ["RELOAD_BAN_WARNING", "checkbox", "Reload additional notice", "Shows an additional message in the save/reload prompt."],
+            ["RELOAD_BAN_WARNING_MESSAGE", "text", "Reload additional notice", "Shown in the save/reload prompt when the notice above is enabled."],
             ["BUTTON_FM_LIST_MOD", "checkbox", "FMList button mod", "Move/reduce the FMLIST button."],
             ["BUTTON_FM_LIST_MOD_MINIMUM_HIDE_DISTANCE", "number", "FMList hide distance", "Minimum distance in km before FMLIST button appears."]
           ],
@@ -2950,6 +3159,7 @@ function createUiapConfigLauncher() {
             ["SIDEBAR_ADDITIONS", "checkbox", "Sidebar additions", "Enables extra sidebar options."],
             ["SIDEBAR_ADDITIONS_EXPAND_CANVAS", "checkbox", "Sidebar expand canvas (enable Sidebar additions)", "Adds canvas height option."],
             ["SIDEBAR_ADDITIONS_HIDE_BACKGROUND", "checkbox", "Sidebar hide background (enable Sidebar additions)", "Adds background hide option."],
+            ["REDUCE_SIDEBAR_BLUR", "checkbox", "Reduce sidebar blur", "Uses lighter blur when sidebar opens."],
             ["MULTIPLE_USERS_NOTICE", "checkbox", "Multiple users notice", "Shows notice when more users are connected."],
             ["MULTIPLE_USERS_NOTICE_NATIVE_POPUP", "checkbox", "Native popup notice", "Uses native popup style for multiple users notice."],
             ["MULTIPLE_USERS_NOTICE_MESSAGE_1", "text", "Notice message 1", "First line of the multiple users notice."],
@@ -2968,7 +3178,6 @@ function createUiapConfigLauncher() {
             ["GLOW_EFFECT_ON_FREQUENCY_INPUT", "checkbox", "Frequency input glow", "Glow around frequency input while focused."],
             ["REDUCE_HALF_OPACITY", "checkbox", "Reduce half opacity", "Makes inactive elements dimmer."],
             ["INCREASE_TOP_RIGHT_ICON_SIZE", "checkbox", "Larger top-right icons", "Slightly increases top-right icon size."],
-            ["REDUCE_SIDEBAR_BLUR", "checkbox", "Reduce sidebar blur", "Uses lighter blur when sidebar opens."],
             ["INCREASE_FREQUENCY_FONT_WEIGHT", "checkbox", "Bolder frequency", "Increases frequency font weight."],
             ["GRADIENT_BUTTONS", "checkbox", "Gradient buttons", "Adds gradient styling to buttons."],
             ["INCLUDE_SCANNER_BUTTONS", "checkbox", "Gradient includes scanner buttons", "Extends gradient styling to scanner controls."],
@@ -2980,19 +3189,26 @@ function createUiapConfigLauncher() {
             ["DIM_INCOMPLETE_PI_CODE", "checkbox", "Dim incomplete PI", "Dims PI when it contains question marks."],
             ["PANEL_STYLE_EFFECT", "select", "Panel style effect", "Panel edge style preset.", [["0","Disabled"],["1","Style 1"],["2","Style 2"],["3","Style 3"]]],
             ["PANEL_STYLE_EFFECT_SIGNAL_PANEL", "checkbox", "Signal panel style", "Applies panel style effect to signal panel."],
-            ["VOLUME_PERCENTAGE_TOAST", "checkbox", "Volume toast", "Displays toast when volume changes."]
+            ["VOLUME_PERCENTAGE_TOAST", "checkbox", "Volume toast", "Displays toast when volume changes."],
+            ["RDS_FLAG_INDICATOR", "checkbox", "RDS flag indicator", "Shows A/B bullet next to radiotext."]
           ],
           rds: [
             ["RDS_ICON_STYLE", "checkbox", "Enable UI Addon Icons Style", "Enables RDS, PTY, TP, TA icons."],
             ["RDS_ICON_STYLE_MOBILE", "checkbox", "Enable UI Addon Icons Style on mobile", "Enables UI Addon Icons Style on mobile."],
 
+            ["IS_TEF_RADIO", "checkbox", "TEF radio mode", "Uses TEF radio MP assumption."],
+            ["METRICS_MONITOR_PLUGIN_IS_INSTALLED", "checkbox", "Metrics Monitor installed", "Enable if Metrics Monitor plugin is installed."],
+            ["IS_VISUALEQ_PLUGIN_ENABLED", "checkbox", "VisualEQ enabled", "Enable if VisualEQ plugin is installed."],
+
+            ["RDS_ICON_PRESET", "select", "RDS icon preset", "0 user, 1 preset 1, 2 preset 2, 3 preset 3.", [["0","User defined"],["1","Preset 1"],["2","Preset 2"],["3","Preset 3"]]],
+
             ["STEREO_ICON_COLOR", "color", "Stereo icon color", "default, auto, or custom #RRGGBB."],
             ["STEREO_ICON_COLOR_OFF", "color", "Stereo off color", "default, auto, or custom #RRGGBB."],
             ["STEREO_ICON_WIDTH", "number", "Stereo icon width", "Stereo circle thickness."],
-            ["STEREO_ICON_SCALE", "text", "Stereo icon scale", "Example: 100%, 110%, 120%. Normalised to match RDS visual size."],
+            ["STEREO_ICON_SCALE", "number", "Stereo icon scale", "Size in percentage. Normalised to match RDS visual size."],
             ["APPLY_STEREO_ICON_GLOW_WITH_MISSING_RDS", "checkbox", "Stereo glow without RDS", "Keeps stereo glow when RDS is missing."],
 
-            ["RDS_ICON_SCALE", "text", "RDS icon scale", "Example: 100%, 110%, 120%."],
+            ["RDS_ICON_SCALE", "number", "RDS icon scale", "Size in percentage."],
             ["RDS_ICON_STYLE_MS_OFF_AS_LETTERS", "checkbox", "MS off as letters", "Uses MS letters for dimmed Music/Speech icons."],
             ["RDS_INDICATOR_ICON_TYPE", "select", "RDS indicator type", "RDS indicator icon type.", [["1","Type 1"],["2","Type 2"]]],
             ["RDS_INDICATOR_ICON_COLOR", "color", "RDS icon color", "default, auto, or custom #RRGGBB."],
@@ -3007,21 +3223,17 @@ function createUiapConfigLauncher() {
             ["MS_INDICATOR_COLOR", "color", "MS color", "default, auto, or custom #RRGGBB."],
             ["MS_INDICATOR_COLOR_OFF", "color", "MS off color", "default, auto, or custom #RRGGBB."],
             ["RDS_ICON_STYLE_REMOVE_RDS_ICON", "checkbox", "Remove RDS icon", "Useful with multipath/Metrics Monitor setups."],
-            ["RDS_FLAG_INDICATOR", "checkbox", "RDS flag indicator", "Shows A/B bullet next to radiotext."],
             ["MULTIPATH_INDICATOR", "checkbox", "Multipath indicator", "Adds multipath icon/text."],
-            ["MULTIPATH_ATTACH_TO", "select", "Multipath attach to", "Target icon for multipath indicator.", [["STEREO","STEREO"],["PTY","PTY"],["MS","MS"],["ECC","ECC"],["TP","TP"],["TA","TA"],["RDS","RDS"]]],
+            ["MULTIPATH_ATTACH_TO", "select", "Multipath attach to", "Target icon for multipath indicator.", [["STEREO","STEREO"],["PTY","PTY"],["MS","MS"],["ECC","ECC"],["TP","TP"],["TA","TA"],["RDS","RDS"],["BW","BW"]]],
             ["MULTIPATH_LEFT_PADDING", "number", "Multipath left padding", "Spacing when not attached to Stereo/Mono."],
             ["MULTIPATH_DISPLAY_MODE", "select", "Multipath display mode", "Icon, text, or both.", [["ICON","ICON"],["TEXT","TEXT"],["BOTH","BOTH"]]],
-            ["IS_TEF_RADIO", "checkbox", "TEF radio mode", "Uses TEF radio MP assumption."],
-            ["METRICS_MONITOR_PLUGIN_IS_INSTALLED", "checkbox", "Metrics Monitor installed", "Enable if Metrics Monitor plugin is installed."],
-            ["IS_VISUALEQ_PLUGIN_ENABLED", "checkbox", "VisualEQ enabled", "Enable if VisualEQ plugin is installed."],
+            ["MULTIPATH_TEXT_SIZE", "number", "Multipath text size", "Size in percentage. Font size for the RF/MP text."],
             ["BANDWIDTH_UPDATE_INTERVAL", "number", "Bandwidth update interval", "Milliseconds."],
             ["LED_GLOW_EFFECT_ICONS_RDS_ICON_STYLE_PTY", "checkbox", "PTY icon glow", "Glow effect for PTY RDS icon style."],
             ["LED_GLOW_EFFECT_ICONS_RDS_ICON_STYLE_MS", "checkbox", "MS icon glow", "Glow effect for MS RDS icon style."],
             ["LED_GLOW_EFFECT_ICONS_BANDWIDTH", "checkbox", "Bandwidth icon glow", "Glow effect for bandwidth."],
             ["LED_GLOW_EFFECT_ICONS_METRICS_MONITOR_PLUGIN", "checkbox", "Metrics icon glow", "Glow for Metrics Monitor icons."],
-            ["REPLACE_MPX_LOGO_WITH_STEREO_LOGO_METRICS_MONITOR_PLUGIN", "checkbox", "Replace MPX with stereo", "Metrics Monitor compatibility option."],
-            ["RDS_ICON_PRESET", "select", "RDS icon preset", "0 user, 1 preset 1, 2 preset 2, 3 preset 3.", [["0","User editable"],["1","Preset 1"],["2","Preset 2"],["3","Preset 3"]]]
+            ["REPLACE_MPX_LOGO_WITH_STEREO_LOGO_METRICS_MONITOR_PLUGIN", "checkbox", "Replace MPX with stereo", "Metrics Monitor compatibility option."]
           ],
           plugins: [
             ["SORT_PLUGIN_BUTTONS", "checkbox", "Sort plugin buttons", "Enables custom plugin button order."],
@@ -3031,6 +3243,16 @@ function createUiapConfigLauncher() {
             ["HIDE_CONSOLE_LOGS", "checkbox", "Hide console logs", "Suppresses normal console logs. Warnings/errors remain."]
           ]
         };
+
+        // Fields that need finer stepping
+        const UIAPE_NUMBER_WHEEL_STEP_OVERRIDES = {
+          RDS_INDICATOR_ICON_GLOW_INTENSITY: 0.05,
+          STEREO_ICON_SCALE: 0.5,
+          RDS_ICON_SCALE: 0.5
+        };
+
+        // Whether the config panel search box also matches setting descriptions, not just titles.
+        const UIAPE_SEARCH_INCLUDE_DESCRIPTIONS = false;
 
         function uiapeEscapeHtml(value) {
           return String(value).replace(/[&<>"']/g, ch => ({
@@ -3072,6 +3294,56 @@ function createUiapConfigLauncher() {
           `;
         }
 
+        function uiapeRenderResetButton(action, key, isNonDefault) {
+          if (!isNonDefault) return "";
+          return `<button type="button" class="uiape-reset-default" data-uiape-action="${action}" data-uiape-reset-key="${key}" title="Reset to default" aria-label="Reset to default">↺</button>`;
+        }
+
+        // Adds/removes just this one row's reset button in place, without re-rendering the
+        // whole panel - re-rendering mid-edit would drop focus/cursor position while typing.
+        function uiapeSyncResetButton(container, key, scope) {
+          if (!container || !key) return;
+          const config = getUiapPanelConfig();
+          const currentValue = scope === "preset"
+            ? (config.RDS_ICON_STYLE_PRESETS?.user || {})[key]
+            : config[key];
+          const defaultValue = scope === "preset"
+            ? uiapeBaselinePresetValue(key)
+            : uiapeBaselineValue(key);
+          const shouldShow = !uiapeValuesEqual(currentValue, defaultValue);
+          const existing = container.querySelector(".uiape-reset-default");
+          if (shouldShow && !existing) {
+            container.insertAdjacentHTML("afterbegin", uiapeRenderResetButton(scope === "preset" ? "reset-preset-field" : "reset-field", key, true));
+          } else if (!shouldShow && existing) {
+            existing.remove();
+          }
+        }
+
+        // Passive indicator only.
+        function uiapeRenderAdminDiffDot(differsFromAdmin) {
+          if (!differsFromAdmin || uiapeDetectAdminSession()) return "";
+          return `<span class="uiape-admin-diff-dot" title="Differs from the admin's current setting" aria-label="Differs from the admin's current setting"></span>`;
+        }
+
+        // Mirrors uiapeSyncResetButton, but targets the label and compares
+        // against the admin's live config.
+        function uiapeSyncAdminDiffDot(labelEl, key, scope) {
+          if (!labelEl || !key || uiapeDetectAdminSession()) return;
+          const config = getUiapPanelConfig();
+          const currentValue = scope === "preset"
+            ? (config.RDS_ICON_STYLE_PRESETS?.user || {})[key]
+            : config[key];
+          const adminValue = scope === "preset" ? uiapeAdminPresetValue(key) : uiapeAdminConfigValue(key);
+          const shouldShow = !uiapeValuesEqual(currentValue, adminValue);
+          const existing = labelEl.querySelector(".uiape-admin-diff-dot");
+          if (shouldShow && !existing) {
+            // Nested inside <strong>.
+            labelEl.querySelector("strong")?.insertAdjacentHTML("beforeend", uiapeRenderAdminDiffDot(true));
+          } else if (!shouldShow && existing) {
+            existing.remove();
+          }
+        }
+
         function uiapeRenderControl(def) {
           const key = def[0];
           const type = def[1];
@@ -3080,6 +3352,8 @@ function createUiapConfigLauncher() {
           const options = def[4] || [];
           const config = getUiapPanelConfig();
           const value = config[key];
+          const resetButtonHtml = uiapeRenderResetButton("reset-field", key, !uiapeValuesEqual(value, uiapeBaselineValue(key)));
+          const adminDiffDotHtml = uiapeRenderAdminDiffDot(!uiapeValuesEqual(value, uiapeAdminConfigValue(key)));
 
           let controlHtml = "";
           if (type === "checkbox") {
@@ -3095,7 +3369,8 @@ function createUiapConfigLauncher() {
           } else if (type === "textarea") {
             controlHtml = `<textarea data-uiape-key="${key}">${uiapeEscapeHtml(value ?? "")}</textarea>`;
           } else {
-            controlHtml = `<input type="${type}" data-uiape-key="${key}" value="${uiapeEscapeHtml(value ?? "")}">`;
+            const stepAttr = type === "number" && UIAPE_NUMBER_WHEEL_STEP_OVERRIDES[key] ? ` step="${UIAPE_NUMBER_WHEEL_STEP_OVERRIDES[key]}"` : "";
+            controlHtml = `<input type="${type}" data-uiape-key="${key}" value="${uiapeEscapeHtml(value ?? "")}"${stepAttr}>`;
           }
 
           // Admin-only visible: lets an admin restrict any individual setting to admins,
@@ -3118,11 +3393,11 @@ function createUiapConfigLauncher() {
           return `
             <div class="${rowClass}">
               <div class="uiape-config-label">
-                <strong>${uiapeEscapeHtml(label)}</strong>
+                <strong>${uiapeEscapeHtml(label)}${adminDiffDotHtml}</strong>
                 <span>${uiapeEscapeHtml(help)}</span>
                 ${adminOnlyToggleHtml}
               </div>
-              <div class="uiape-config-control">${controlHtml}</div>
+              <div class="uiape-config-control">${resetButtonHtml}${controlHtml}</div>
             </div>
           `;
         }
@@ -3150,9 +3425,12 @@ function createUiapConfigLauncher() {
             const help = field[3];
             const rawValue = userPreset[key];
             const value = Array.isArray(rawValue) ? rawValue.join(", ") : rawValue;
+            const resetButtonHtml = uiapeRenderResetButton("reset-preset-field", key, !uiapeValuesEqual(rawValue, uiapeBaselinePresetValue(key)));
+            const adminDiffDotHtml = uiapeRenderAdminDiffDot(!uiapeValuesEqual(rawValue, uiapeAdminPresetValue(key)));
+            const presetStepAttr = type === "number" && UIAPE_NUMBER_WHEEL_STEP_OVERRIDES[key] ? ` step="${UIAPE_NUMBER_WHEEL_STEP_OVERRIDES[key]}"` : "";
             const inputHtml = type === "select"
               ? `<select data-uiape-preset-field="${key}">${(field[4] || []).map(opt => `<option value="${uiapeEscapeHtml(opt[0])}" ${String(value) === String(opt[0]) ? "selected" : ""}>${uiapeEscapeHtml(opt[1])}</option>`).join("")}</select>`
-              : `<input type="${type}" data-uiape-preset-field="${key}" value="${uiapeEscapeHtml(value ?? "")}">`;
+              : `<input type="${type}" data-uiape-preset-field="${key}" value="${uiapeEscapeHtml(value ?? "")}"${presetStepAttr}>`;
             const isAdminOnlyRow = adminOnlyKeys.includes(key);
             const adminOnlyToggleHtml = isAdmin ? `
               <label class="uiape-admin-only-toggle" title="Hide this setting from non-admin users">
@@ -3163,12 +3441,12 @@ function createUiapConfigLauncher() {
             return `
               <div class="uiape-config-row${isAdminOnlyRow ? " uiape-config-row-admin-only" : ""}">
                 <div class="uiape-config-label">
-                  <strong>${uiapeEscapeHtml(label)}</strong>
+                  <strong>${uiapeEscapeHtml(label)}${adminDiffDotHtml}</strong>
                   <span>${uiapeEscapeHtml(help)}</span>
                   ${adminOnlyToggleHtml}
                 </div>
                 <div class="uiape-config-control">
-                  ${inputHtml}
+                  ${resetButtonHtml}${inputHtml}
                 </div>
               </div>
             `;
@@ -3181,7 +3459,7 @@ function createUiapConfigLauncher() {
             ${showRdsPresetInfo ? `
             <div class="uiape-preset-summary">
               ${summary}
-              <div style="margin-top:6px;">For custom ordering, set <code>RDS icon preset</code> to <code>User editable</code>, then edit the user preset below.</div>
+              <div style="margin-top:6px;">For custom ordering, set <code>RDS icon preset</code> to <code>User defined</code>, then edit the user preset below.</div>
               <button type="button" class="uiape-mini-button" data-uiape-action="copy-active-rds-preset">Copy selected preset to User</button>
             </div>
             ` : ""}
@@ -3275,17 +3553,61 @@ function createUiapConfigLauncher() {
             const target = panel.querySelector(`[data-uiape-controls="${sectionName}"]`);
             if (!target) return;
             const visibleDefs = uiapeControlSections[sectionName].filter(uiapeIsControlVisibleForCurrentUser);
-            target.innerHTML = visibleDefs.map(uiapeRenderControl).join("");
+            const rendered = visibleDefs.map(uiapeRenderControl);
 
             // "rds" and "plugins" always render extra content below the plain controls,
             // so they're never considered empty even if every checkbox/input is admin-only.
             const hasExtraContent = sectionName === "rds" || sectionName === "plugins";
-            if (sectionName === "rds") target.insertAdjacentHTML("beforeend", uiapeRenderRdsPresetEditor());
+            if (sectionName === "rds") {
+              // Insert right after RDS_ICON_PRESET (its own trigger) instead of at the
+              // section's end, so the dropdown and its editor stay adjacent. Falls back to
+              // the end if that row is hidden from this user (e.g. marked admin-only).
+              const presetIndex = visibleDefs.findIndex(def => def[0] === "RDS_ICON_PRESET");
+              rendered.splice(presetIndex === -1 ? rendered.length : presetIndex + 1, 0, uiapeRenderRdsPresetEditor());
+            }
+            target.innerHTML = rendered.join("");
             if (sectionName === "plugins") target.insertAdjacentHTML("beforeend", uiapeRenderPluginOrderHelper());
 
             // Hide the whole section (title included) when it has no controls this user can see.
             const sectionEl = target.closest(".uiape-config-section");
-            if (sectionEl) sectionEl.hidden = visibleDefs.length === 0 && !hasExtraContent;
+            if (sectionEl) {
+              const isEmpty = visibleDefs.length === 0 && !hasExtraContent;
+              sectionEl.hidden = isEmpty;
+              // Stashed so uiapeApplySearchFilter can restore this exact state when the search is cleared.
+              sectionEl.dataset.uiapeEmpty = String(isEmpty);
+            }
+          });
+          uiapeApplySearchFilter();
+        }
+
+        // Re-applies the current search query's row/section visibility - called after every
+        // full re-render (uiapeRenderAllControls) so search state survives things like preset
+        // switches or reset-to-default clicks, and directly from the search input's own listener.
+        function uiapeApplySearchFilter() {
+          const searchInput = panel.querySelector("#uiape-config-search-input");
+          const query = (searchInput?.value || "").trim().toLowerCase();
+
+          panel.querySelectorAll(".uiape-config-section").forEach(sectionEl => {
+            const rows = sectionEl.querySelectorAll(".uiape-config-row");
+            if (!query) {
+              // .uiape-config-row sets its own "display: grid", which overrides the browser's
+              // default "[hidden] { display: none }" rule - so hiding/showing rows must go
+              // through an inline style instead of the hidden property (unlike sections, which
+              // don't set their own display and so can safely use .hidden further below).
+              rows.forEach(rowEl => { rowEl.style.display = ""; });
+              // Restore the section's own non-search hidden state.
+              sectionEl.hidden = sectionEl.dataset.uiapeEmpty === "true";
+              return;
+            }
+            let sectionHasMatch = false;
+            rows.forEach(rowEl => {
+              const title = rowEl.querySelector(".uiape-config-label strong")?.textContent || "";
+              const desc = UIAPE_SEARCH_INCLUDE_DESCRIPTIONS ? (rowEl.querySelector(".uiape-config-label span")?.textContent || "") : "";
+              const matches = title.toLowerCase().includes(query) || desc.toLowerCase().includes(query);
+              rowEl.style.display = matches ? "" : "none";
+              if (matches) sectionHasMatch = true;
+            });
+            sectionEl.hidden = !sectionHasMatch;
           });
         }
 
@@ -3303,7 +3625,7 @@ function createUiapConfigLauncher() {
             ...UIAPE_DEFAULT_CONFIG.RDS_ICON_STYLE_PRESETS.user,
             ...(presets.user || {})
           };
-          const modeFields = ["MS_HEIGHT_MODE", "TP_HEIGHT_MODE", "TA_HEIGHT_MODE"];
+          const modeFields = ["MS_HEIGHT_MODE", "TP_HEIGHT_MODE", "TA_HEIGHT_MODE", "ECC_HEIGHT_MODE"];
           const nextValue = field === "FIRST_ROW" || field === "SECOND_ROW"
             ? uiapeParseList(value)
             : modeFields.includes(field)
@@ -3321,6 +3643,9 @@ function createUiapConfigLauncher() {
         }
 
         uiapeRenderAllControls();
+        uiapeRenderAllControlsFn = uiapeRenderAllControls;
+
+        panel.querySelector("#uiape-config-search-input")?.addEventListener("input", uiapeApplySearchFilter);
 
         panel.addEventListener("change", (event) => {
           const field = event.target;
@@ -3337,18 +3662,24 @@ function createUiapConfigLauncher() {
             } else {
               updateUiapConfig(colorModeKey, UIAPE_DEFAULT_CONFIG[colorModeKey]);
             }
+            uiapeSyncResetButton(field.closest(".uiape-config-control"), colorModeKey, "plain");
+            uiapeSyncAdminDiffDot(field.closest(".uiape-config-row")?.querySelector(".uiape-config-label"), colorModeKey, "plain");
             return;
           }
 
           const colorPickerKey = field?.dataset?.uiapeColorPicker;
           if (colorPickerKey) {
             updateUiapConfig(colorPickerKey, field.value);
+            uiapeSyncResetButton(field.closest(".uiape-config-control"), colorPickerKey, "plain");
+            uiapeSyncAdminDiffDot(field.closest(".uiape-config-row")?.querySelector(".uiape-config-label"), colorPickerKey, "plain");
             return;
           }
 
           const presetField = field?.dataset?.uiapePresetField;
           if (presetField) {
             uiapeUpdateUserPresetField(presetField, field.value);
+            uiapeSyncResetButton(field.closest(".uiape-config-control"), presetField, "preset");
+            uiapeSyncAdminDiffDot(field.closest(".uiape-config-row")?.querySelector(".uiape-config-label"), presetField, "preset");
             return;
           }
 
@@ -3412,11 +3743,46 @@ function createUiapConfigLauncher() {
           }
 
           updateUiapConfig(key, value);
+          uiapeSyncResetButton(field.closest(".uiape-config-control"), key, "plain");
+          uiapeSyncAdminDiffDot(field.closest(".uiape-config-row")?.querySelector(".uiape-config-label"), key, "plain");
         });
+
+        // Prevent scroll
+        panel.addEventListener("wheel", (event) => {
+          const field = event.target;
+          if (!field || field.tagName !== "INPUT" || field.type !== "number") return;
+          if (document.activeElement !== field) return;
+          event.preventDefault();
+          const key = field.dataset.uiapeKey || field.dataset.uiapePresetField;
+          const step = UIAPE_NUMBER_WHEEL_STEP_OVERRIDES[key] || 1;
+          const decimals = (String(step).split(".")[1] || "").length;
+          const current = Number(field.value) || 0;
+          const next = event.deltaY < 0 ? current + step : current - step;
+          field.value = decimals ? next.toFixed(decimals) : String(next);
+          field.dispatchEvent(new Event("change", { bubbles: true }));
+        }, { passive: false });
 
         panel.addEventListener("click", async (event) => {
           const action = event.target?.dataset?.uiapeAction;
           if (!action) return;
+
+          if (action === "reset-field") {
+            const key = event.target.dataset.uiapeResetKey;
+            if (key) {
+              updateUiapConfig(key, uiapeBaselineValue(key));
+              uiapeRenderAllControls();
+            }
+            return;
+          }
+
+          if (action === "reset-preset-field") {
+            const key = event.target.dataset.uiapeResetKey;
+            if (key) {
+              uiapeUpdateUserPresetField(key, uiapeArrayText(uiapeBaselinePresetValue(key)));
+              uiapeRenderAllControls();
+            }
+            return;
+          }
 
           if (action === "copy-active-rds-preset") {
             const config = getUiapPanelConfig();
@@ -3519,14 +3885,18 @@ function createUiapConfigLauncher() {
 
     attachLauncher();
 
-    const observer = new MutationObserver(() => {
+    // Debounced: attachLauncher() itself inserts/removes nodes under document.body, which
+    // this same observer watches - without capping the rate, an unstable findUiapHost()
+    // result (e.g. a host element with flickering/animating dimensions) could re-trigger
+    // attachLauncher() as fast as mutations queue up instead of settling within a frame or two.
+    const observer = new MutationObserver(uiapeDebounceRaf(() => {
         const gear = document.getElementById("uiape-config-gear");
         const panel = document.getElementById("uiape-config-panel");
         const host = findUiapHost();
         if (!gear || !panel || !gear.isConnected || !panel.isConnected || (host && gear.parentElement !== host)) {
             attachLauncher();
         }
-    });
+    }));
 
     observer.observe(document.body, { childList: true, subtree: true });
 
@@ -5050,11 +5420,12 @@ function addRandomIcon(result) {
     const iconIdMap = {
         'STEREO': '#stereoIcon',
         'PTY': '#ptyLabel',
-        'MS': '#msIcon',
+        'MS': '#ptyIconOverlay',
         'ECC': '#eccWrapper',
         'TP': '#tpIcon',
         'TA': '#taIcon',
-        'RDS': '#rdsIcon'
+        'RDS': '#rdsIcon',
+        'BW': '#bwLabel'
     };
 
     const attachToId = iconIdMap[String(cfg.MULTIPATH_ATTACH_TO || 'STEREO').toUpperCase()] || '#stereoIcon';
@@ -5084,6 +5455,11 @@ function addRandomIcon(result) {
     iconSpan.style.verticalAlign = 'middle';
     iconSpan.style.fontSize = '16px';
     iconSpan.style.position = 'relative';
+    // Centers the icon and text children via flexbox instead of relying on their individual
+    // inline vertical-align/baseline metrics, which shift as the text's own height changes
+    // with MULTIPATH_TEXT_SIZE - that's what was pushing the icon upward as text grew.
+    iconSpan.style.display = 'inline-flex';
+    iconSpan.style.alignItems = 'center';
 
     if (!result) {
       iconSpan.classList.remove('opacity-full');
@@ -5576,29 +5952,6 @@ style.innerHTML = `
   pointer-events: auto;
 }
 
-#signal-icons .multipath-rfmp-text,
-.multipath-container .multipath-rfmp-text {
-  display: inline-flex;
-  flex-direction: column;
-  gap: 1px;
-  margin-left: 4px;
-  margin-bottom: 4px;
-  width: 46px;
-  min-width: 46px;
-  line-height: 1;
-  font-size: 8px;
-  font-weight: 600;
-  letter-spacing: 0;
-  vertical-align: middle;
-  align-items: flex-start;
-  text-align: left;
-  white-space: nowrap;
-}
-
-.multipath-rfmp-text span {
-    font-size: 105%;
-}
-
 #signalPanel.compact-meters #signal-icons img.status-icon {
   height: 10px;
 }
@@ -5999,6 +6352,7 @@ function handleTextSocketMessage(message) {
     eccWrapper.innerHTML = "";
 
     const hasEcc = message.ecc !== undefined && message.ecc !== null && message.ecc !== "";
+    const eccPreset = uiapeGetActiveRdsPreset(liveRdsCfg);
 
     if (!hasEcc) {
       const noEcc = document.createElement('span');
@@ -6011,7 +6365,7 @@ function handleTextSocketMessage(message) {
       noEcc.style.padding = '0 3px 0 3px';
       noEcc.style.display = 'inline-flex';
       noEcc.style.alignItems = 'center';
-      noEcc.style.height = '17px';
+      noEcc.style.height = uiapeResolveLiveRdsIconHeight(eccPreset, "ECC", eccPreset.PTY_HEIGHT) + 'px';
       noEcc.style.paddingBottom = '0.5px'; // Value that aligns for both Firefox and Chrome
       if (REDUCE_HALF_OPACITY) noEcc.style.opacity = off_opacity;
       eccWrapper.appendChild(noEcc);
@@ -6019,7 +6373,12 @@ function handleTextSocketMessage(message) {
       const eccSpan = document.querySelector('.data-flag');
       if (eccSpan && eccSpan.innerHTML.trim() !== "") {
       const newSpan = eccSpan.cloneNode(true);
-      newSpan.style.marginLeft = "5.25px"; // Reduce margin to align flag icons
+      // Total left+right margin is fixed at UIAPE_ECC_FLAG_RESERVED_WIDTH so eccWrapper's width
+      // always matches the no-ECC placeholder's (later icons never shift); ECC_FLAG_SPACING only
+      // moves the flag's own visual position by shifting how that fixed amount is split.
+      const eccFlagLeftInset = Number(eccPreset.ECC_FLAG_SPACING) || 0;
+      newSpan.style.marginLeft = eccFlagLeftInset + 'px';
+      newSpan.style.marginRight = (UIAPE_ECC_FLAG_RESERVED_WIDTH - eccFlagLeftInset) + 'px';
       newSpan.style.marginTop = "0";
       newSpan.style.transform = "translateY(0)";
       newSpan.style.display = "inline-flex";
@@ -6650,9 +7009,17 @@ function createIconElement(iconType, preset) {
       eccWrapper.style.display = 'inline-flex';
       eccWrapper.style.alignItems = 'center';
       eccWrapper.style.whiteSpace = 'nowrap';
+      eccWrapper.style.marginRight = preset.ECC_ICON_SPACING + 'px';
       const eccSpan = document.querySelector('.data-flag');
       if (eccSpan && eccSpan.innerHTML.trim() !== "") {
-        eccWrapper.appendChild(eccSpan.cloneNode(true));
+        const eccClone = eccSpan.cloneNode(true);
+        // Total left+right margin is fixed at UIAPE_ECC_FLAG_RESERVED_WIDTH so eccWrapper's width
+        // always matches the no-ECC placeholder's (later icons never shift); ECC_FLAG_SPACING only
+        // moves the flag's own visual position by shifting how that fixed amount is split.
+        const eccFlagLeftInset = Number(preset.ECC_FLAG_SPACING) || 0;
+        eccClone.style.marginLeft = eccFlagLeftInset + 'px';
+        eccClone.style.marginRight = (UIAPE_ECC_FLAG_RESERVED_WIDTH - eccFlagLeftInset) + 'px';
+        eccWrapper.appendChild(eccClone);
       } else {
         const noEcc = document.createElement('span');
         noEcc.textContent = 'ECC';
@@ -6664,7 +7031,7 @@ function createIconElement(iconType, preset) {
         noEcc.style.padding = '0 3px 0 3px';
         noEcc.style.display = 'inline-flex';
         noEcc.style.alignItems = 'center';
-        noEcc.style.height = '17px';
+        noEcc.style.height = uiapeResolveLiveRdsIconHeight(preset, "ECC", preset.PTY_HEIGHT) + 'px';
         noEcc.style.paddingBottom = isFirefox ? '1px' : '0';
         if (REDUCE_HALF_OPACITY) noEcc.style.opacity = off_opacity;
         eccWrapper.appendChild(noEcc);
@@ -7025,6 +7392,15 @@ function checkUpdate(setupOnly, pluginName, urlUpdateLink, urlFetchLink) {
       opacity: 1 !important;
       visibility: visible !important;
       pointer-events: auto !important;
+    }
+    /* Matches this block's own pointer-events:none baseline above in specificity, so it
+       actually wins on touch devices where :hover can never apply. */
+    @media (hover: none) {
+      #signalPanel.uiape-config-host > #uiape-config-gear,
+      #flags-container-desktop.uiape-config-host > #uiape-config-gear {
+        opacity: 1 !important;
+        pointer-events: auto !important;
+      }
     }
     #uiape-config-panel {
       z-index: 900 !important;
