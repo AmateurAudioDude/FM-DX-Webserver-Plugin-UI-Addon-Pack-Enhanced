@@ -967,6 +967,7 @@ function uiapeAfterConfigChange(key) {
     key === "MULTIPATH_DISPLAY_MODE"
   ) {
     if (uiapeReapplyMultipathIndicator) uiapeReapplyMultipathIndicator();
+    if (key === "MULTIPATH_LEFT_PADDING") uiapeRefreshLiveCss();
     return;
   }
   if (UIAPE_MESSAGE_DRIVEN_KEYS.has(key)) {
@@ -1399,7 +1400,7 @@ ${cfg.RDS_ICON_STYLE_REMOVE_RDS_ICON === true ? `
 }
 
 .multipath-container {
-  margin-left: 0 !important;
+  margin-left: ${cfg.MULTIPATH_LEFT_PADDING}px !important;
 }
 
 #eccWrapper {
