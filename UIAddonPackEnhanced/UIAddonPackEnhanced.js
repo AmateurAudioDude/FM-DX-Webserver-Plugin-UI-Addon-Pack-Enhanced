@@ -2997,6 +2997,9 @@ function createUiapConfigLauncher() {
           panel.addEventListener(type, (event) => event.stopPropagation());
         });
 
+        // Prevent keystrokes typed into any panel field reaching the Webserver's document.onkeydown
+        panel.addEventListener("keydown", (event) => event.stopPropagation());
+
         panel.querySelector(".uiape-config-close").addEventListener("click", (event) => {
           event.preventDefault();
           event.stopPropagation();
