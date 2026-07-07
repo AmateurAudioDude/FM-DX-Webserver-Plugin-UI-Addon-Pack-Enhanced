@@ -1581,7 +1581,7 @@ function uiapeApplyCanvasFadeEffect() {
   canvasGraph.getAnimations().forEach(anim => anim.cancel());
   canvasGraph.animate(
     [{ opacity: 0 }, { opacity: 1 }],
-    { duration: 300, easing: 'ease-in', fill: 'none' }
+    { duration: 500, easing: 'ease-in', fill: 'none' }
   );
 }
 
