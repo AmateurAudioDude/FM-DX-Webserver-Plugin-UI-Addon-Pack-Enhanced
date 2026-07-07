@@ -1,9 +1,12 @@
 /*
-    UI Add-on Pack Enhanced v1.0.1 by AAD
+    UI Add-on Pack Enhanced v1.0.3 by AAD
+    -------------------------------------
+    https://github.com/AmateurAudioDude/FM-DX-Webserver-Plugin-UI-Addon-Pack-Enhanced
 
     //// Server-side config bridge ////
+
     Stores the shared/default UI Add-on Pack profile in plugins_configs/UIAddonPackEnhanced.json.
-    Admin writes this profile; regular users read it as their default base.
+    Admin writes this profile, regular users read it as their default base.
 */
 
 'use strict';
@@ -22,7 +25,7 @@ const endpointsRouter = require('../../server/endpoints');
 const rootDir = path.dirname(require.main.filename);
 
 function resolveConfigFolderPath() {
-    // FM-DX Webserver normally uses plugins_configs (plural), same as Inactivity Monitor.
+    // FM-DX Webserver normally uses plugins_configs.
     // The plugin_configs fallback is kept for local installs where the folder was named differently.
     const preferred = path.join(rootDir, 'plugins_configs');
     const legacy = path.join(rootDir, 'plugin_configs');
@@ -34,8 +37,7 @@ function resolveConfigFolderPath() {
 const configFolderPath = resolveConfigFolderPath();
 const configFilePath = path.join(configFolderPath, 'UIAddonPackEnhanced.json');
 
-// Hard safety cap on the saved config file. This is enforced in writeJsonFileAtomic,
-// the single choke point every write goes through, so it holds regardless of caller.
+// Hard safety cap on the saved config file, enforced in writeJsonFileAtomic.
 const MAX_CONFIG_FILE_BYTES = 100 * 1024; // 100 KB
 
 // Keep this intentionally small. The client plugin merges this shared profile over its complete UIAP_DEFAULT_CONFIG.
@@ -58,10 +60,7 @@ function sanitizeConfig(config) {
     }));
 }
 
-// Defends against a compromised/malicious admin session flooding a single input
-// field (a notice message, a custom label, a preset row, etc) with a huge string
-// to bloat the file. Checked on every save, in addition to the whole-file cap in
-// writeJsonFileAtomic - that cap alone would reject the save but not say why.
+// Limit saved string length.
 const MAX_CONFIG_FIELD_STRING_LENGTH = 2000;
 
 function findOversizedStringField(value, fieldPath) {

@@ -1,6 +1,6 @@
 /*
-    UI Add-on Pack Enhanced v1.0.2 by AAD
-    ----------------------------
+    UI Add-on Pack Enhanced v1.0.3 by AAD
+    -------------------------------------
     https://github.com/AmateurAudioDude/FM-DX-Webserver-Plugin-UI-Addon-Pack-Enhanced
 */
 
@@ -8,7 +8,12 @@
 
 (async () => {
 
-const pluginVersion = '1.0.2';
+// Whether the config panel search box also matches setting descriptions, not just titles.
+const UIAPE_SEARCH_INCLUDE_DESCRIPTIONS = false;
+// Signal offset in dB
+const SIGNAL_OFFSET = 0.00;
+
+const pluginVersion = '1.0.3';
 const pluginName = "UI Add-on Pack Enhanced";
 const pluginHomepageUrl = "https://github.com/AmateurAudioDude/FM-DX-Webserver-Plugin-UI-Addon-Pack-Enhanced";
 const pluginUpdateUrl = "https://raw.githubusercontent.com/AmateurAudioDude/FM-DX-Webserver-Plugin-UI-Addon-Pack-Enhanced/refs/heads/main/UIAddonPackEnhanced/UIAddonPackEnhanced.js";
@@ -60,19 +65,19 @@ try {
           it wherever makes sense using the const from step 2.
           If it needs to run on page load, wrap setup in
             uiapeOnDomReady(() => { ... })
-          not a raw DOMContentLoaded listener - this file's top-level await
+          not a raw DOMContentLoaded listener, since this file's top-level await
           means DOMContentLoaded may have already fired by the time a plain
           listener registered down here would attach.
 
     HOW TO MAKE A SETTING ADMIN-ONLY
     --------------------------------
-    5. No code needed - as admin, open the panel and tick "Admin only" next to the
+    5. No code needed, as admin, open the panel and tick "Admin only" next to the
        setting itself. That toggles its key in and out of ADMIN_ONLY_KEYS (a normal,
        server-synced config value), which uiapeIsControlVisibleForCurrentUser() checks
        to hide the control from the panel for non-admins.
 
        Note: this only hides the control from the UI. The real security
-       boundary is server-side - checkStrictAdmin on the
+       boundary is server-side, checkStrictAdmin on the
        POST /ui-addon-pack-enhanced-config endpoint (in
        UIAddonPackEnhanced_server.js) rejects non-admin saves regardless of
        what's visible in the panel.
@@ -110,10 +115,11 @@ const UIAPE_PLUGIN_BUTTON_DEFAULT_LABELS = {
   29: "DX-Watchdog",
   30: "Analog Scale",
   31: "WebStats",
-  32: "Custom Links (1)",
-  33: "Custom Links (2)",
-  34: "Custom Links (3)",
-  35: "Custom Links (4)"
+  // Reserved
+  91: "Custom Links (1)",
+  92: "Custom Links (2)",
+  93: "Custom Links (3)",
+  94: "Custom Links (4)"
 };
 
 const UIAPE_PLUGIN_BUTTON_DEFAULT_MAP = {
@@ -148,25 +154,18 @@ const UIAPE_PLUGIN_BUTTON_DEFAULT_MAP = {
   29: "btn-DX-Watchdog-link",
   30: "et-analog-scale-btn",
   31: "webstats-btn",
-  32: "custom-links-btn-0",
-  33: "custom-links-btn-1",
-  34: "custom-links-btn-2",
-  35: "custom-links-btn-3"
+  // Reserved
+  91: "custom-links-btn-0",
+  92: "custom-links-btn-1",
+  93: "custom-links-btn-2",
+  94: "custom-links-btn-3"
 };
 
 const UIAPE_SERVER_CONFIG_ENDPOINT = "/ui-addon-pack-enhanced-config";
 
 // +++++++++++++++ STEP 5 +++++++++++++++ //
 
-// Admin-only-ness is itself an admin-controlled setting (ADMIN_ONLY_KEYS, editable from the
-// panel via the "Admin only" checkbox next to each control) rather than a fixed list in code.
-//
-// Reconciles a saved ADMIN_ONLY_KEYS/ADMIN_ONLY_KEYS_SEEN pair against the CURRENT code
-// defaults. ADMIN_ONLY_KEYS_SEEN records every default-admin-only key this profile has ever
-// been reconciled against. A code default not yet in SEEN (e.g. a key added by a later plugin
-// update, on a profile saved before that update shipped) gets folded into the effective set
-// here; a key already in SEEN is left exactly as the admin last set it, whether that's on or
-// off - so a deliberate opt-out of a built-in default is never silently re-applied.
+// ADMIN_ONLY_KEYS is itself admin editable, not a fixed list in code
 function uiapeReconcileAdminOnlyKeys(savedKeys, savedSeen) {
   const codeDefaults = UIAPE_DEFAULT_CONFIG.ADMIN_ONLY_KEYS || [];
   const seenSet = new Set(Array.isArray(savedSeen) ? savedSeen : []);
@@ -175,27 +174,22 @@ function uiapeReconcileAdminOnlyKeys(savedKeys, savedSeen) {
   codeDefaults.forEach(key => {
     if (!seenSet.has(key)) keysSet.add(key);
   });
-  // Every current default, and anything the admin has manually added beyond the
-  // defaults, now counts as decided - future default-list changes won't touch it again.
+  // Marks these decided so a future default change won't override them
   codeDefaults.forEach(key => seenSet.add(key));
   keysSet.forEach(key => seenSet.add(key));
 
   return { keys: Array.from(keysSet), seen: Array.from(seenSet) };
 }
 
-// This always reads from the admin/server profile directly, never the merged/user-overridable
-// config - otherwise a non-admin could locally override ADMIN_ONLY_KEYS itself and undo every
-// restriction at once.
+// Reads the admin profile directly so a user can't override ADMIN_ONLY_KEYS locally
 function uiapeGetAdminOnlyKeys() {
   const adminCfg = readUiapAdminConfig();
   return uiapeReconcileAdminOnlyKeys(adminCfg.ADMIN_ONLY_KEYS, adminCfg.ADMIN_ONLY_KEYS_SEEN).keys;
 }
 
-// Keys whose ONLY runtime effect is CSS appended to the live style element (see uiapeBuildLiveCss).
-// These are applied instantly in the config panel without needing a page reload.
-// Every other key is treated as reload-required.
+// Keys that apply instantly via live CSS, everything else needs a reload
 
-// +++++++++++++++ STEP 4a +++++++++++++++ //
+// +++++++++++++++ STEP 4a 1/2 +++++++++++++++ //
 
 const UIAPE_LIVE_CSS_KEYS = new Set([
   "DISPLAY_CANVAS_IN_LANDSCAPE_MODE",
@@ -233,11 +227,13 @@ const UIAPE_LIVE_CSS_KEYS = new Set([
 // Live-preview state. Populated during load and while the panel is used.
 let uiapeLiveStyleElement = null;              // dedicated <style> holding all live CSS
 let uiapeRebuildRdsIconPanel = null;           // set inside the RDS/Stereo icons block, if it runs
+let uiapeRdsIconStylePanelReady = false;       // true once the signal panel has actually been built
+let uiapeInitRdsIconStylePanelFn = null;       // set inside the ENABLE_PLUGIN gate, so uiapeAfterConfigChange (declared outside it) can call it
+let uiapeTeardownRdsIconStylePanelFn = null;   // set inside the ENABLE_PLUGIN gate, so uiapeAfterConfigChange (declared outside it) can call it
 let uiapeReapplyMultipathIndicator = null;     // set inside the multipath indicator block, if it runs
-let uiapeMobileStatusBarConnectionFn = null;   // set inside the MOBILE_STATUS_BAR_CONNECTION block, so moveButtons() (a sibling block) can call it
-let uiapeRenderAllControlsFn = null;           // set inside attachLauncher, so saveUiapConfig (a sibling top-level function) can refresh reset-button visibility right after saving
+let uiapeMobileStatusBarConnectionFn = null;   // set inside the MOBILE_STATUS_BAR_CONNECTION block, so moveButtons() can call it
+let uiapeRenderAllControlsFn = null;           // set inside attachLauncher, so saveUiapConfig can refresh reset-button visibility right after saving
 
-// Parse-time position marker: our styles insert before this, so later plugin CSS (e.g. Metrics Monitor) wins cascade ties exactly as it does against the original synchronous plugin.
 const uiapeStyleAnchor = document.createElement('style');
 uiapeStyleAnchor.id = 'uiape-style-anchor';
 document.head.appendChild(uiapeStyleAnchor);
@@ -282,9 +278,7 @@ function uiapeSaveServerConfig(config) {
       },
       body: payload
     }).then(response => {
-      // Read the body before checking response.ok - error responses (400/413/500) carry
-      // a specific reason in their JSON body that would otherwise be lost behind a
-      // generic "HTTP <status>" message.
+      // Reads the body first so error responses keep their specific reason, not just the status
       return response.json().catch(() => ({})).then(payload => {
         if (!response.ok || !payload || payload.ok !== true) {
           throw new Error(payload?.error || `HTTP ${response.status}`);
@@ -304,9 +298,7 @@ function uiapeSaveServerConfig(config) {
 
 const { config: UIAPE_SERVER_CONFIG, isAdmin: UIAPE_IS_ADMIN } = await uiapeFetchServerConfig();
 
-// Server/shared profile. The server bridge stores it in plugins_configs/UIAddonPackEnhanced.json.
-// Admin saves go to the server profile. Regular users get this profile as their default base
-// and only their personal overrides stay in browser localStorage.
+// Shared admin profile, stored server side, users layer local overrides on top
 const UIAPE_BUNDLED_SITE_CONFIG = {
   ENABLE_PLUGIN: true
 };
@@ -331,11 +323,7 @@ const UIAPE_BOOT_SITE_ENABLE_VALUE = UIAPE_BOOT_SITE_CONFIG.ENABLE_PLUGIN === un
   ? ENABLE_PLUGIN_DEFAULT
   : UIAPE_BOOT_SITE_CONFIG.ENABLE_PLUGIN === true;
 
-// Users are allowed to see the toggle/panel by design. Their personal enable switch is local.
-// First visit defaults to ON and starts from the server/shared profile.
-// Admins always follow the server-shared value directly (matching every other admin config
-// read in this file) - otherwise a stale personal "uiape_enabled" localStorage flag from an
-// earlier visit could silently override a server-side change the admin just made.
+// Admins always follow the live server value, so a stale local flag can't override an admin's own change
 const ENABLE_PLUGIN = UIAPE_IS_ADMIN
   ? UIAPE_BOOT_SITE_ENABLE_VALUE
   : (UIAPE_BOOT_USER_ENABLE_VALUE === null
@@ -547,28 +535,25 @@ const UIAPE_DEFAULT_CONFIG = {
 
   SORT_PLUGIN_BUTTONS: false,
   PLUGINS_USER_ORDER: "1",
+  SHOW_CUSTOM_BUTTON_EDITOR: false,
   PLUGIN_BUTTON_DEFAULT_LABELS: { ...UIAPE_PLUGIN_BUTTON_DEFAULT_LABELS },
   PLUGIN_BUTTON_DEFAULT_MAP: { ...UIAPE_PLUGIN_BUTTON_DEFAULT_MAP },
   PLUGIN_BUTTON_CUSTOM_LABELS: {
-    32: "Custom Links (1)",
-    33: "Custom Links (2)",
-    34: "Custom Links (3)",
-    35: "Custom Links (4)"
+    91: "Custom Links (1)",
+    92: "Custom Links (2)",
+    93: "Custom Links (3)",
+    94: "Custom Links (4)"
   },
   PLUGIN_BUTTON_CUSTOM_MAP: {
-    32: "custom-links-btn-0",
-    33: "custom-links-btn-1",
-    34: "custom-links-btn-2",
-    35: "custom-links-btn-3"
+    91: "custom-links-btn-0",
+    92: "custom-links-btn-1",
+    93: "custom-links-btn-2",
+    94: "custom-links-btn-3"
   },
 
   HIDE_CONSOLE_LOGS: false,
 
-  // Which settings are hidden from non-admin users in the config panel. Admin-editable
-  // per-setting via the "Admin only" checkbox next to each control - see
-  // uiapeIsControlVisibleForCurrentUser() and the "uiapeAdminOnlyKey" change handler.
-  // Ordered to follow the config panel's own section/field order (core, mobile, tuning,
-  // rds) purely for readability when auditing this list - has no effect on behavior.
+  // Settings hidden from non-admins, editable per-setting via the panel's Admin only checkbox
   ADMIN_ONLY_KEYS: [
     "BUTTON_FM_LIST_MOD_MINIMUM_HIDE_DISTANCE",
     "RELOAD_BAN_WARNING",
@@ -589,11 +574,7 @@ const UIAPE_DEFAULT_CONFIG = {
     "LED_GLOW_EFFECT_ICONS_METRICS_MONITOR_PLUGIN",
     "REPLACE_MPX_LOGO_WITH_STEREO_LOGO_METRICS_MONITOR_PLUGIN"
   ],
-  // Tracks which keys this saved profile has already been reconciled against (see
-  // uiapeReconcileAdminOnlyKeys()). Lets a later plugin update add a new key to the
-  // ADMIN_ONLY_KEYS default list above and have it actually apply admin-only on
-  // installs saved before that update, without overriding an admin's own explicit
-  // opt-out of an existing default.
+  // Tracks which admin-only defaults have already been decided, so a future default change won't override an explicit opt-out
   ADMIN_ONLY_KEYS_SEEN: []
 };
 
@@ -663,10 +644,7 @@ function uiapeDetectAdminSession() {
   return UIAPE_IS_ADMIN;
 }
 
-// Runs callback immediately if the DOM is already ready, otherwise waits for DOMContentLoaded.
-// Needed because this file's top-level IIFE is async and awaits a network fetch before reaching
-// most feature code below; by the time execution resumes, DOMContentLoaded has usually already
-// fired, so a plain addEventListener('DOMContentLoaded', ...) registered down here would never run.
+// Runs immediately if DOM is ready, otherwise waits for DOMContentLoaded, since this file's async fetch means a plain listener could miss it
 function uiapeOnDomReady(callback) {
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", callback);
@@ -698,8 +676,7 @@ uiapeOnDomReady(()=>{if(!window.hasCustomPopup){let styleElement=document.create
 function confirmAsync(n){return new Promise(function(e,t){let o,i=!1;function c(n){i&&(i=!1,o.classList.remove("open"),setTimeout(function(){o.remove()},300))}if(!i){o=document.createElement("div"),o.classList.add("popup-plugin"),o.innerHTML=`\n                <div class="popup-plugin-content">${n.replace(/\n/g,"<br>")}\n                    <button id="popup-plugin-confirm">OK</button>\n                    <button id="popup-plugin-cancel">Cancel</button>\n                </div>`,document.body.appendChild(o);let t=o.querySelector("#popup-plugin-confirm"),u=o.querySelector("#popup-plugin-cancel");t.addEventListener("click",function(){c(),e(!0)}),u.addEventListener("click",function(){c(),e(!1)}),document.addEventListener("keydown",function n(t){"Escape"===t.key&&i&&(t.preventDefault(),c(),e(!1),document.removeEventListener("keydown",n))}),o.addEventListener("click",function(n){n.stopPropagation()}),setTimeout(function(){o.classList.add("open"),i=!0},10)}})}
 
 function readUiapAdminConfig() {
-  // Server-side shared/default profile. This is what every browser receives first.
-  // Admin edits are saved through UIAddonPackEnhanced_server.js into plugins_configs/UIAddonPackEnhanced.json.
+  // Server side shared profile, what every browser receives first
   return { ...UIAPE_SITE_CONFIG };
 }
 
@@ -713,10 +690,7 @@ function readUiapStoredConfig() {
   // Admin always edits/sees the shared server profile.
   if (uiapeDetectAdminSession()) return adminConfig;
 
-  // Regular users always start from the server profile and may keep browser-local overrides.
-  // Admin-only keys are ignored here rather than deleted from storage: if a user saved a
-  // personal value before a setting became admin-only, this leaves it untouched in
-  // localStorage so it applies again automatically if the setting is ever un-restricted.
+  // Admin-only keys are skipped, not deleted, so they reapply automatically if ever un-restricted
   const userConfig = readUiapUserConfig();
   uiapeGetAdminOnlyKeys().forEach(key => delete userConfig[key]);
 
@@ -755,11 +729,9 @@ function writeUiapStoredConfig(config, profile) {
     return;
   }
 
-  // Admin/default profile is shared server-side. Keep a local copy only for immediate UI refresh,
-  // but the real shared source is plugins_configs/UIAddonPackEnhanced.json written by the server bridge.
+  // Local copy is just for immediate refresh, the real shared source is the server file
   localStorage.setItem(UIAPE_CONFIG_KEY, JSON.stringify(normalizedConfig, null, 2));
-  // Returned so callers that reload right after calling this can await it first - otherwise a
-  // reload could happen before the POST finishes and fetch the still-old server value.
+  // Returned so a caller can await it before reloading, avoiding a reload before the save finishes
   return uiapeSaveServerConfig(normalizedConfig).then(result => {
     if (!result || result.ok !== true) {
       console.warn(`[${pluginName}] Admin config was not confirmed by the server. Check UIAddonPackEnhanced_server.js and file permissions.`);
@@ -823,7 +795,7 @@ async function saveUiapConfig() {
   // Reload-required changes were saved but are not visually applied on this page yet.
   const needsReload = UIAPE_RELOAD_DIRTY_KEYS.size > 0;
 
-  // The saved config becomes the new baseline; live (CSS) changes are already visible.
+  // The saved config becomes the new baseline, live changes are already visible
   UIAPE_SAVED_BASELINE = JSON.parse(JSON.stringify(normalizedConfig));
   UIAPE_RELOAD_DIRTY_KEYS.clear();
   uiapeUpdateReloadNotice();
@@ -847,7 +819,7 @@ async function saveUiapConfig() {
     }
   }
 
-  // Close the panel; live changes remain applied.
+  // Closes the panel, live changes remain applied
   const panel = document.getElementById("uiape-config-panel");
   const host = document.querySelector(".uiape-config-host.uiape-config-open");
   if (panel) panel.classList.remove("uiape-open");
@@ -869,8 +841,7 @@ function uiapeValuesEqual(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
-// "Default" for the reset-to-default button means the site's actual saved baseline (admin's
-// server config, or this user's own last save).
+// "Default" for the reset-to-default button means the site's actual saved baseline.
 function uiapeBaselineValue(key) {
   const baseline = UIAPE_SAVED_BASELINE || UIAPE_DEFAULT_CONFIG;
   return key in baseline ? baseline[key] : UIAPE_DEFAULT_CONFIG[key];
@@ -881,8 +852,7 @@ function uiapeBaselinePresetValue(key) {
   return baselineUser && key in baselineUser ? baselineUser[key] : UIAPE_DEFAULT_CONFIG.RDS_ICON_STYLE_PRESETS.user[key];
 }
 
-// Track this user's own last-saved config, which can itself
-// already diverge from what the admin currently has configured.
+// Reads the admin's actual current config, for the passive differs from admin dot only
 function uiapeAdminConfigValue(key) {
   const adminConfig = uiapeNormalizeConfig(readUiapAdminConfig());
   return adminConfig[key];
@@ -903,15 +873,24 @@ function uiapeRefreshLiveCss() {
   }
 }
 
-// Show/hide the "reload required" note based on how many reload-required keys have changed.
-function uiapeUpdateReloadNotice() {
+// Show/hide the "reload required" note, flickering it if a new change lands while it's already shown.
+function uiapeUpdateReloadNotice(justDirtied) {
   const note = document.querySelector("[data-uiape-reload-note]");
-  if (note) note.hidden = UIAPE_RELOAD_DIRTY_KEYS.size === 0;
+  if (!note) return;
+  const wasVisible = !note.hidden;
+  note.hidden = UIAPE_RELOAD_DIRTY_KEYS.size === 0;
+  if (note.hidden) {
+    note.classList.remove("uiape-reload-note-flicker");
+    return;
+  }
+  if (justDirtied && wasVisible) {
+    note.classList.remove("uiape-reload-note-flicker");
+    void note.offsetWidth;
+    note.classList.add("uiape-reload-note-flicker");
+  }
 }
 
-// Read fresh inside handleTextSocketMessage on every incoming station-data message
-// (already firing continuously), so no explicit re-apply action is needed here -
-// just don't flag them as "reload required" once the message loop picks them up.
+// Read fresh on every station message already, so just don't flag these as reload required
 const UIAPE_MESSAGE_DRIVEN_KEYS = new Set([
   "MS_INDICATOR_COLOR", "MS_INDICATOR_COLOR_OFF",
   "PTY_INDICATOR_COLOR", "PTY_INDICATOR_COLOR_OFF",
@@ -927,8 +906,7 @@ const UIAPE_MESSAGE_DRIVEN_KEYS = new Set([
   "RDS_FLAG_INDICATOR"
 ]);
 
-// Called after every draft change. Live CSS keys apply instantly; all other keys are
-// tracked (compared against the saved baseline) so we can warn a reload is needed.
+// Live CSS keys apply instantly, other keys are tracked so we can warn a reload is needed
 function uiapeAfterConfigChange(key) {
   if (UIAPE_LIVE_CSS_KEYS.has(key)) {
     uiapeRefreshLiveCss();
@@ -955,9 +933,31 @@ function uiapeAfterConfigChange(key) {
     return;
   }
   if (key === "RDS_ICON_PRESET" || key === "RDS_ICON_STYLE_PRESETS") {
-    // Only rebuild when Enhanced owns the icon row; otherwise this would overwrite Metrics Monitor's panel.
+    // Only rebuild when Enhanced owns the icon row, otherwise this would overwrite Metrics Monitor's panel
     if (uiapeRebuildRdsIconPanel && getUiapPanelConfig().RDS_ICON_STYLE) uiapeRebuildRdsIconPanel();
     uiapeRefreshLiveCss();
+    return;
+  }
+  if (key === "SHOW_CUSTOM_BUTTON_EDITOR") {
+    if (uiapeRenderAllControlsFn) uiapeRenderAllControlsFn();
+    return;
+  }
+  if (key === "RDS_ICON_STYLE") {
+    const cfg = getUiapPanelConfig();
+    if (cfg.RDS_ICON_STYLE) {
+      if (uiapeRdsIconStylePanelReady) {
+        if (uiapeRebuildRdsIconPanel) uiapeRebuildRdsIconPanel();
+      } else if (!cfg.IS_VISUALEQ_PLUGIN_ENABLED && window.innerWidth > 360) {
+        if (uiapeInitRdsIconStylePanelFn) uiapeInitRdsIconStylePanelFn();
+      }
+    } else if (uiapeRdsIconStylePanelReady && uiapeTeardownRdsIconStylePanelFn) {
+      uiapeTeardownRdsIconStylePanelFn();
+    }
+    uiapeRefreshLiveCss();
+    // The multipath icon's attach target moves between the native and custom panels with this setting
+    if (uiapeReapplyMultipathIndicator) uiapeReapplyMultipathIndicator();
+    UIAPE_RELOAD_DIRTY_KEYS.delete(key);
+    uiapeUpdateReloadNotice(false);
     return;
   }
   if (
@@ -976,18 +976,19 @@ function uiapeAfterConfigChange(key) {
   const baseline = UIAPE_SAVED_BASELINE || {};
   if (uiapeValuesEqual(getUiapPanelConfig()[key], baseline[key])) {
     UIAPE_RELOAD_DIRTY_KEYS.delete(key);
+    uiapeUpdateReloadNotice(false);
   } else {
+    const wasDirty = UIAPE_RELOAD_DIRTY_KEYS.has(key);
     UIAPE_RELOAD_DIRTY_KEYS.add(key);
+    uiapeUpdateReloadNotice(!wasDirty);
   }
-  uiapeUpdateReloadNotice();
 }
 
-// Builds the CSS for all live-previewable visual features from a config object.
-// Regenerated wholesale on every change so toggling a feature off cleanly removes its rules.
+// Regenerated wholesale on every change so toggling a feature off cleanly removes its rules
 function uiapeBuildLiveCss(cfg) {
   let css = "";
 
-  // +++++++++++++++ STEP 4a +++++++++++++++ //
+  // +++++++++++++++ STEP 4a 2/2 +++++++++++++++ //
 
   if (cfg.DISPLAY_CANVAS_IN_LANDSCAPE_MODE) {
     css += `
@@ -1267,8 +1268,7 @@ function uiapeBuildLiveCss(cfg) {
   `;
   }
 
-  // Sort plugin buttons: pure CSS "order" rules from PLUGINS_USER_ORDER, no DOM/interval
-  // setup involved, so it lives here alongside the rest of the always-live CSS.
+  // Pure CSS order rules, lives here with the rest of the live CSS
   if (cfg.SORT_PLUGIN_BUTTONS) {
     const sortButtonsDefaultMap = { ...(cfg.PLUGIN_BUTTON_DEFAULT_MAP || UIAPE_PLUGIN_BUTTON_DEFAULT_MAP) };
     const sortButtonsCustomMap = Object.fromEntries(
@@ -1280,24 +1280,27 @@ function uiapeBuildLiveCss(cfg) {
       .split(',')
       .map(num => parseInt(num.trim()))
       .filter(Boolean);
-    const orderedSet = new Set(orderArray);
+
+    const orderedSelectors = new Set();
 
     orderArray.forEach((num, index) => {
       const selector = uiapeCssId(sortButtonsMap[num]);
-      if (selector) css += `${selector} { order: ${index + 1}; }\n`;
+      if (selector) {
+        css += `${selector} { order: ${index + 1}; }\n`;
+        orderedSelectors.add(selector);
+      }
     });
 
-    Object.entries(sortButtonsMap).forEach(([num, buttonId]) => {
-      if (!orderedSet.has(parseInt(num))) {
-        const selector = uiapeCssId(buttonId);
-        if (selector) css += `${selector} { order: 999; }\n`;
+    Object.values(sortButtonsMap).forEach(buttonId => {
+      const selector = uiapeCssId(buttonId);
+      if (selector && !orderedSelectors.has(selector)) {
+        css += `${selector} { order: 999; }\n`;
+        orderedSelectors.add(selector);
       }
     });
   }
 
-  // Panel style effect: pure CSS, no DOM/interval setup - safe to live-toggle.
-  // The mobile-portrait skip check is kept exactly as the original JS check (not a media
-  // query) per an earlier decision not to change this specific behavior.
+  // Mobile-portrait skip mirrors a JS check used elsewhere, keep them matching
   if (
     cfg.PANEL_STYLE_EFFECT &&
     !(/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) && window.innerHeight > window.innerWidth)
@@ -1377,13 +1380,7 @@ function uiapeBuildLiveCss(cfg) {
 `;
   }
 
-  // RDS/Stereo Icons: mirrors (as property-level overrides, not full rule
-  // duplicates) the static <style> block built once inside the MetricsMonitor-
-  // derived block further down in the file, so these settings can update
-  // without a reload. Only takes effect while the master RDS icon feature
-  // (RDS_ICON_STYLE / LED_GLOW_EFFECT_ICONS_METRICS_MONITOR_PLUGIN /
-  // RDS_ICON_STYLE_REMOVE_RDS_ICON) was already active at page load - turning
-  // that master feature itself on/off still needs a reload.
+  // Live overrides for RDS icon settings, only apply if the master feature was already on at page load
   if (
     !cfg.IS_VISUALEQ_PLUGIN_ENABLED &&
     (cfg.RDS_ICON_STYLE || cfg.LED_GLOW_EFFECT_ICONS_METRICS_MONITOR_PLUGIN || cfg.RDS_ICON_STYLE_REMOVE_RDS_ICON) &&
@@ -1558,11 +1555,7 @@ function uiapeCssId(id) {
   return `#${clean.replace(/([ #;?%&,.+*~\':"!^$[\]()=>|\/])/g, '\\$1')}`;
 }
 
-// Declared at top level (not inside the ENABLE_PLUGIN gate further below) so
-// uiapeAfterConfigChange() can call these directly - a function declared inside an
-// if-block in strict mode is only visible within that block, not hoisted out to here.
-// The MutationObserver setup and gated initial call remain inside ENABLE_PLUGIN as before;
-// only the function bodies themselves needed to move.
+// Kept at top level so uiapeAfterConfigChange can call it, strict mode hides functions declared inside an if block
 function checkPiForQuestionMark() {
   const dataPi = document.querySelector('#data-pi');
   if (!dataPi) return;
@@ -1581,9 +1574,7 @@ function uiapeApplyCanvasFadeEffect() {
   );
 }
 
-// Creates the volume toast + attaches its listeners to #volumeSlider; no-ops if already
-// active. Paired with uiapeTeardownVolumeToast() so VOLUME_PERCENTAGE_TOAST can be
-// toggled live in the panel instead of only taking effect on the next reload.
+// Creates the volume toast and its listeners, no-ops if already active, paired with a teardown so it can toggle live
 let uiapeVolumeToastState = null;
 
 function uiapeSetupVolumeToast() {
@@ -1671,63 +1662,7 @@ function uiapeTeardownVolumeToast() {
   uiapeVolumeToastState = null;
 }
 
-function migrateUiapPluginButtonMapV7() {
-  const cfg = getUiapConfig();
-  const map = { ...(cfg.PLUGIN_BUTTON_CUSTOM_MAP || {}) };
-  const labels = { ...(cfg.PLUGIN_BUTTON_CUSTOM_LABELS || {}) };
-  let changed = false;
-
-  // v5/v6 used 31/32/33 for Custom Links. v7 reserves 31 for WebStats
-  // and shifts editable Custom Link slots to 32/33/34, leaving 35 as an empty custom slot.
-  const oldCustomLinksAt31 =
-    map[31] === "custom-links-btn-0" &&
-    map[32] === "custom-links-btn-1" &&
-    map[33] === "custom-links-btn-2";
-
-  if (oldCustomLinksAt31) {
-    map[32] = "custom-links-btn-0";
-    map[33] = "custom-links-btn-1";
-    map[34] = "custom-links-btn-2";
-    delete map[31];
-
-    labels[32] = "Custom Links (1)";
-    labels[33] = "Custom Links (2)";
-    labels[34] = "Custom Links (3)";
-    delete labels[31];
-    changed = true;
-  }
-
-  if (map[31]) {
-    // 31 is now a built-in WebStats slot; preserve user-entered 31 by moving it to 35 if possible.
-    if (!map[35]) {
-      map[35] = map[31];
-      labels[35] = labels[31] || "Custom Plugin (35)";
-    }
-    delete map[31];
-    delete labels[31];
-    changed = true;
-  }
-
-  if (!Object.prototype.hasOwnProperty.call(map, 35)) {
-    map[35] = "";
-    labels[35] = labels[35] || "Custom Plugin (35)";
-    changed = true;
-  }
-
-  if (!changed) return;
-
-  writeUiapStoredConfig({
-    ...cfg,
-    PLUGIN_BUTTON_CUSTOM_MAP: map,
-    PLUGIN_BUTTON_CUSTOM_LABELS: labels
-  });
-  UIAPE_CONFIG = getUiapConfig();
-}
-
-migrateUiapPluginButtonMapV7();
-
-// Snapshot the persisted config so the panel can tell live changes from reload-required ones,
-// and can revert unsaved changes when closed.
+// Lets the panel tell live changes from reload-required ones, and revert unsaved edits on close
 UIAPE_SAVED_BASELINE = JSON.parse(JSON.stringify(getUiapPanelConfig()));
 
 
@@ -1737,7 +1672,7 @@ function createUiapNativeEnableToggle() {
   const adminConfig = { ...UIAPE_DEFAULT_CONFIG, ...readUiapAdminConfig() };
   const isAdmin = uiapeDetectAdminSession();
 
-  // Toggle is visible to everyone. Admin writes the shared server default; users write only their browser-local enable choice.
+  // Admin writes the shared server default, users only write their local enable choice
   if (document.getElementById("uiape-enable-plugin")) return;
 
   const modalContent = document.querySelector(".modal-panel-content");
@@ -1797,8 +1732,7 @@ function installUiapNativeEnableToggle() {
     tryInstall();
   }
 
-  // Debounced: watches the whole page for any added/removed node, so it can otherwise
-  // fire far more often than needed for a check this cheap to just cap at once per frame.
+  // Debounced, watches the whole page for added or removed nodes, this check is cheap but could fire constantly otherwise
   const observer = new MutationObserver(uiapeDebounceRaf(tryInstall));
   observer.observe(document.body, { childList: true, subtree: true });
 }
@@ -1965,15 +1899,12 @@ const LED_GLOW_EFFECT_SMALL = UIAPE_CONFIG.LED_GLOW_EFFECT_SMALL; // Enables glo
 const LED_GLOW_EFFECT_RDSPS = UIAPE_CONFIG.LED_GLOW_EFFECT_RDSPS; // Enables glow effect for RDS PS text, which might annoy users.
 const LED_GLOW_EFFECT_FREQ = UIAPE_CONFIG.LED_GLOW_EFFECT_FREQ;  // Enables glow effect for frequency digits, which might annoy users.
 
-// Dims the PI CODE font for incomplete PI decodes. Read live via getUiapPanelConfig()
-// in checkPiForQuestionMark() instead of snapshotted here, so it can apply instantly.
+// Dims the PI CODE font for incomplete decodes, read live so it can apply instantly
 // Sets the hex color code for stereo icon.
 // Use a 6-digit hex color, e.g. "#FF0000" for bright red, "auto" for the theme accent, or "default" for native styling.
 const STEREO_ICON_COLOR = UIAPE_CONFIG.STEREO_ICON_COLOR;
 const STEREO_ICON_COLOR_OFF = UIAPE_CONFIG.STEREO_ICON_COLOR_OFF;
-// Panel edge style effect.
-// Valid options are 0 (disabled), 1, 2, or 3. Read live from cfg inside uiapeBuildLiveCss()
-// instead of snapshotted here - see UIAPE_LIVE_CSS_KEYS.
+// Panel edge style, 0 disabled, 1 to 3, read live inside uiapeBuildLiveCss
 // #################### RDS ICON STYLING (Highpoint2000) #################### //
 
 // Enables RDS icons.
@@ -1995,14 +1926,10 @@ function uiapeCssScaleValue(value, factor = 1) {
   return Number(scaled.toFixed(4)).toString();
 }
 
-// Fixed total width the ECC flag icon must occupy (flag width + this) so eccWrapper matches
-// the no-ECC placeholder's width and later row icons never shift. ECC_FLAG_SPACING only
-// controls how that fixed amount splits between left-inset and right-trailing space.
+// Keeps eccWrapper matching the no-ECC placeholder's width, so later row icons never shift
 const UIAPE_ECC_FLAG_RESERVED_WIDTH = 5.25;
 
-// Resolves the active RDS_ICON_STYLE_PRESETS entry from a (possibly live) config
-// object. Kept separate from the RDS/Stereo icons block's own preset resolution
-// below so it stays reachable even when that block hasn't executed (feature off).
+// Kept separate from the RDS/Stereo icons block so it stays reachable even when that feature is off
 function uiapeGetActiveRdsPreset(cfg) {
   const presets = cfg.RDS_ICON_STYLE_PRESETS || {};
   const preset = cfg.RDS_ICON_PRESET === 0 ? presets.user : (presets[cfg.RDS_ICON_PRESET] || presets[1]);
@@ -2078,17 +2005,11 @@ const APPLY_STEREO_ICON_GLOW_WITH_MISSING_RDS = UIAPE_CONFIG.APPLY_STEREO_ICON_G
 //   BW     = Current bandwidth
 //
 
-// === Preset definitions ===
-// Resolved live from config via uiapeGetActiveRdsPreset() (near uiapeBuildLiveCss),
-// not a load-time snapshot, so preset edits/switches don't need a reload.
+// Preset definitions, resolved live so edits and switches don't need a reload
 // #################### PLUGIN BUTTON ORDER #################### //
 
-// SORT_PLUGIN_BUTTONS / PLUGINS_USER_ORDER / PLUGIN_BUTTON_CUSTOM_MAP are read live from cfg
-// inside uiapeBuildLiveCss() instead of snapshotted here - see UIAPE_LIVE_CSS_KEYS.
-// Set the plugin order by specifying the corresponding numbers from below.
-// Example format: "1, 2, 11, 4" - this defines the display order.
-// Mapping of plugin IDs to their corresponding button element IDs.
-// Use these numbers in 'PLUGINS_USER_ORDER' to control which plugins appear and in what order.
+// These are read live from cfg inside uiapeBuildLiveCss, not snapshotted here
+// Set PLUGINS_USER_ORDER using the numbers below, comma separated, e.g. "1, 2, 11, 4"
 //
 //    1:       Spectrum
 //    2:       Record
@@ -2120,9 +2041,12 @@ const APPLY_STEREO_ICON_GLOW_WITH_MISSING_RDS = UIAPE_CONFIG.APPLY_STEREO_ICON_G
 //   28:       Video
 //   29:       DX-Watchdog
 //   30:       Analog Scale
-//   31:       Custom Links (1)
-//   32:       Custom Links (2)
-//   33:       Custom Links (3)
+//   31:       WebStats
+//
+//   91:       Custom Links (1)
+//   92:       Custom Links (2)
+//   93:       Custom Links (3)
+//   94:       Custom Links (4)
 //
 
 // #################### CONSOLE LOG SETTINGS #################### //
@@ -2181,7 +2105,7 @@ function uiapeIsCurrentUserAdmin() {
 }
 
 function uiapeCanShowConfigPanel() {
-  // Gear/panel is visible to everyone. Admin edits the server/shared profile; users edit local overrides.
+  // Admin edits the shared profile, users edit local overrides
   return true;
 }
 
@@ -2565,6 +2489,11 @@ function createUiapConfigLauncher() {
         --uiape-reset-y: 0px;
       }
 
+      .uiape-reset-default-icon {
+        display: inline-block;
+        transform: translate(var(--uiape-reset-icon-x, 0px), var(--uiape-reset-icon-y, 0px));
+      }
+
       .uiape-reset-default:hover {
         border-color: var(--color-4, #888);
         color: var(--color-4, #888);
@@ -2691,7 +2620,7 @@ function createUiapConfigLauncher() {
 
       .uiape-plugin-edit-row {
         display: inline-grid;
-        grid-template-columns: 30px 118px 154px 18px 18px;
+        grid-template-columns: 30px 118px 154px 18px 18px 18px;
         gap: 4px;
         align-items: center;
         width: max-content;
@@ -2723,6 +2652,11 @@ function createUiapConfigLauncher() {
         padding-bottom: 2px !important;
       }
 
+      .uiape-plugin-edit-row .uiape-plugin-order-add,
+      .uiape-plugin-edit-row .uiape-plugin-order-remove {
+        margin-left: 0 !important;
+      }
+
       .uiape-plugin-edit-head {
         opacity: .68;
         font-size: 10px;
@@ -2739,6 +2673,19 @@ function createUiapConfigLauncher() {
         cursor: pointer;
         font-size: 11px;
         margin-top: 7px;
+      }
+
+      @keyframes uiape-reload-note-flicker {
+        0% { opacity: 1; }
+        10% { opacity: .3; }
+        20% { opacity: 1; }
+        30% { opacity: .3; }
+        40% { opacity: 1; }
+        100% { opacity: 1; }
+      }
+
+      .uiape-config-reload-note.uiape-reload-note-flicker {
+        animation: uiape-reload-note-flicker 1.6s ease-out forwards;
       }
 
       .uiape-config-warning {
@@ -2819,6 +2766,11 @@ function createUiapConfigLauncher() {
           width: min(360px, calc(100vw - 20px));
           max-height: calc(100vh - 64px);
         }
+
+        .uiape-reset-default-icon {
+          --uiape-reset-icon-x: 0px;
+          --uiape-reset-icon-y: -2px;
+        }
       }
     `;
 
@@ -2858,6 +2810,15 @@ function createUiapConfigLauncher() {
 
         const staleGear = document.getElementById("uiape-config-gear");
         const stalePanel = document.getElementById("uiape-config-panel");
+
+        // Prevent configuration panel closing on mobile from gear relocation
+        if (staleGear && staleGear.isConnected && stalePanel && stalePanel.isConnected) {
+            host.classList.add("uiape-config-host");
+            host.classList.toggle("uiape-config-fallback-host", usingFallbackHost);
+            if (staleGear.parentElement !== host) host.appendChild(staleGear);
+            return;
+        }
+
         if (staleGear) staleGear.remove();
         if (stalePanel) stalePanel.remove();
 
@@ -3083,10 +3044,7 @@ function createUiapConfigLauncher() {
         }
 
         updateUiapNativeModalState();
-        // Debounced: this watches the whole page for class/style changes, and its own callback
-        // forces a reflow (getComputedStyle/getBoundingClientRect) - on a page with frequent
-        // unrelated class/style churn (RDS updates, other plugins, etc.) that could otherwise
-        // run the expensive check far more often than once per frame.
+        // Debounced, its callback forces a reflow and unrelated page churn could trigger it constantly
         const nativeModalObserver = new MutationObserver(uiapeDebounceRaf(updateUiapNativeModalState));
         nativeModalObserver.observe(document.body, { attributes: true, childList: true, subtree: true, attributeFilter: ["class", "style"] });
 
@@ -3117,7 +3075,7 @@ function createUiapConfigLauncher() {
           [25, "Validator", "URDSValidator"], [26, "FM Scale", "analog-scale-btn"], [27, "My Logs", "btn-mylogs-link"],
           [28, "Video", "social-record-btn"], [29, "DX-Watchdog", "btn-DX-Watchdog-link"],
           [30, "Analog Scale", "et-analog-scale-btn"], [31, "WebStats", "webstats-btn"],
-          [32, "Custom Links (1)", "custom-links-btn-0"], [33, "Custom Links (2)", "custom-links-btn-1"], [34, "Custom Links (3)", "custom-links-btn-2"], [35, "Custom Plugin (35)", ""]
+          [91, "Custom Links (1)", "custom-links-btn-0"], [92, "Custom Links (2)", "custom-links-btn-1"], [93, "Custom Links (3)", "custom-links-btn-2"], [94, "Custom Plugin (94)", ""]
         ];
 
         const UIAPE_RDS_PRESET_FIELDS = [
@@ -3198,7 +3156,7 @@ function createUiapConfigLauncher() {
           ],
           rds: [
             ["RDS_ICON_STYLE", "checkbox", "Enable UI Addon Icons Style", "Enables RDS, PTY, TP, TA icons."],
-            ["RDS_ICON_STYLE_MOBILE", "checkbox", "Enable UI Addon Icons Style on mobile", "Enables UI Addon Icons Style on mobile."],
+            ["RDS_ICON_STYLE_MOBILE", "checkbox", "Enable UI Addon Icons Style on mobile", "Enables UI Addon Icons Style on mobile, and turns on the setting above too since this depends on it."],
 
             ["IS_TEF_RADIO", "checkbox", "TEF radio mode", "Uses TEF radio MP assumption."],
             ["METRICS_MONITOR_PLUGIN_IS_INSTALLED", "checkbox", "Metrics Monitor installed", "Enable if Metrics Monitor plugin is installed."],
@@ -3241,7 +3199,8 @@ function createUiapConfigLauncher() {
           ],
           plugins: [
             ["SORT_PLUGIN_BUTTONS", "checkbox", "Sort plugin buttons", "Enables custom plugin button order."],
-            ["PLUGINS_USER_ORDER", "textarea", "Plugin order", "Comma-separated plugin numbers. Example: 1, 2, 11, 4."]
+            ["PLUGINS_USER_ORDER", "textarea", "Plugin order", "Comma-separated plugin numbers. Example: 1, 2, 11, 4."],
+            ["SHOW_CUSTOM_BUTTON_EDITOR", "checkbox", "Show custom button editor", "Shows the editable button map for custom link numbers."]
           ],
           console: [
             ["HIDE_CONSOLE_LOGS", "checkbox", "Hide console logs", "Suppresses normal console logs. Warnings/errors remain."]
@@ -3254,9 +3213,6 @@ function createUiapConfigLauncher() {
           STEREO_ICON_SCALE: 0.5,
           RDS_ICON_SCALE: 0.5
         };
-
-        // Whether the config panel search box also matches setting descriptions, not just titles.
-        const UIAPE_SEARCH_INCLUDE_DESCRIPTIONS = false;
 
         function uiapeEscapeHtml(value) {
           return String(value).replace(/[&<>"']/g, ch => ({
@@ -3300,11 +3256,10 @@ function createUiapConfigLauncher() {
 
         function uiapeRenderResetButton(action, key, isNonDefault) {
           if (!isNonDefault) return "";
-          return `<button type="button" class="uiape-reset-default" data-uiape-action="${action}" data-uiape-reset-key="${key}" title="Reset to default" aria-label="Reset to default">↺</button>`;
+          return `<button type="button" class="uiape-reset-default" data-uiape-action="${action}" data-uiape-reset-key="${key}" title="Reset to default" aria-label="Reset to default"><span class="uiape-reset-default-icon">\u21BA</span></button>`;
         }
 
-        // Adds/removes just this one row's reset button in place, without re-rendering the
-        // whole panel - re-rendering mid-edit would drop focus/cursor position while typing.
+        // Updates just this row's reset button in place, a full re-render would drop focus while typing
         function uiapeSyncResetButton(container, key, scope) {
           if (!container || !key) return;
           const config = getUiapPanelConfig();
@@ -3329,8 +3284,7 @@ function createUiapConfigLauncher() {
           return `<span class="uiape-admin-diff-dot" title="Differs from the admin's current setting" aria-label="Differs from the admin's current setting"></span>`;
         }
 
-        // Mirrors uiapeSyncResetButton, but targets the label and compares
-        // against the admin's live config.
+        // Mirrors uiapeSyncResetButton but targets the label and compares against the admin's live config
         function uiapeSyncAdminDiffDot(labelEl, key, scope) {
           if (!labelEl || !key || uiapeDetectAdminSession()) return;
           const config = getUiapPanelConfig();
@@ -3377,8 +3331,7 @@ function createUiapConfigLauncher() {
             controlHtml = `<input type="${type}" data-uiape-key="${key}" value="${uiapeEscapeHtml(value ?? "")}"${stepAttr}>`;
           }
 
-          // Admin-only visible: lets an admin restrict any individual setting to admins,
-          // right from the row itself, instead of editing ADMIN_ONLY_KEYS by hand.
+          // Lets an admin restrict this setting to admins, right from the row itself
           let adminOnlyToggleHtml = "";
           let isAdminOnlyRow = false;
           if (uiapeDetectAdminSession()) {
@@ -3455,9 +3408,7 @@ function createUiapConfigLauncher() {
               </div>
             `;
           }).join("");
-          // The summary, help text, and copy button are all just reference material for
-          // choosing/acting on RDS_ICON_PRESET, so they follow that setting's own admin-only
-          // status rather than always being shown.
+          // This reference material follows RDS_ICON_PRESET's own admin-only status
           const showRdsPresetInfo = uiapeIsControlVisibleForCurrentUser(["RDS_ICON_PRESET"]);
           return `
             ${showRdsPresetInfo ? `
@@ -3487,7 +3438,7 @@ function createUiapConfigLauncher() {
             ...(UIAPE_DEFAULT_CONFIG.PLUGIN_BUTTON_CUSTOM_LABELS || {}),
             ...(config.PLUGIN_BUTTON_CUSTOM_LABELS || {})
           };
-          return labels[num] || fallback || `Custom Plugin (${num})`;
+          return labels[num] || fallback || uiapeDefaultCustomPluginLabel(num);
         }
 
         function uiapeGetPluginCustomMap() {
@@ -3496,6 +3447,18 @@ function createUiapConfigLauncher() {
             ...(UIAPE_DEFAULT_CONFIG.PLUGIN_BUTTON_CUSTOM_MAP || {}),
             ...(config.PLUGIN_BUTTON_CUSTOM_MAP || {})
           };
+        }
+
+        // The default label for a custom slot: its real Custom Links name for 91-94, or the
+        // next number in that same (1)-(4) counting for an ad-hoc slot added above 94.
+        function uiapeDefaultCustomPluginLabel(num) {
+          const key = Number(num);
+          const builtInLabel = UIAPE_DEFAULT_CONFIG.PLUGIN_BUTTON_CUSTOM_LABELS[key];
+          if (builtInLabel) return builtInLabel;
+          const adHocNums = Object.keys(uiapeGetPluginCustomMap()).map(Number).filter(n => Number.isFinite(n) && n > 94).sort((a, b) => a - b);
+          const rank = adHocNums.indexOf(key);
+          const position = 4 + (rank === -1 ? adHocNums.length : rank) + 1;
+          return `Custom Plugin (${position})`;
         }
 
         function uiapePluginButtonId(num, fallbackId) {
@@ -3511,8 +3474,7 @@ function createUiapConfigLauncher() {
         }
 
         function uiapeRenderPluginOrderHelper() {
-          // Every button/field here reads or writes PLUGINS_USER_ORDER directly, so the whole
-          // helper follows that setting's own admin-only status rather than always being shown.
+          // This whole helper follows PLUGINS_USER_ORDER's own admin-only status
           if (!uiapeIsControlVisibleForCurrentUser(["PLUGINS_USER_ORDER"])) return "";
 
           const byNum = new Map(UIAPE_PLUGIN_BUTTON_DEFAULTS.map(item => [item[0], item]));
@@ -3528,19 +3490,22 @@ function createUiapConfigLauncher() {
                 return `<div><code>${num}</code> = ${uiapeEscapeHtml(label)} <button type="button" class="uiape-mini-button uiape-plugin-order-add" data-uiape-action="append-plugin-order" data-uiape-plugin-num="${num}" title="Add ${num} to order">+</button><button type="button" class="uiape-mini-button uiape-plugin-order-remove" data-uiape-action="remove-plugin-order" data-uiape-plugin-num="${num}" title="Remove ${num} from order">-</button></div>`;
               }).join("")}
             </div>
+            ${getUiapPanelConfig().SHOW_CUSTOM_BUTTON_EDITOR ? `
             <div class="uiape-preset-summary" style="margin-top:8px;">
-              Editable button map. You can edit the plugin order manually directly or use +/- to add or remove from the predefined plugins id list. You can edit IDs <code>32-35</code> to any existing button id, or add more numbers for extra buttons not included in the original list.
+              Editable button map. You can edit the plugin order manually directly or use +/- to add or remove from the predefined plugins id list. You can edit IDs <code>91-94</code> to any existing button id, or add more numbers for extra buttons not included in the original list.
             </div>
             <div class="uiape-plugin-edit-map">
-              <div class="uiape-plugin-edit-row uiape-plugin-edit-head"><span>No.</span><span>Label</span><span>Button DOM id</span><span></span><span></span></div>
-              ${uiapePluginRowsForPanel().filter(num => num >= 32 || (customMap[num] && num !== 30 && num !== 31)).map(num => {
+              <div class="uiape-plugin-edit-row uiape-plugin-edit-head"><span>No.</span><span>Label</span><span>Button DOM id</span><span></span><span></span><span></span></div>
+              ${uiapePluginRowsForPanel().filter(num => num >= 91 || (customMap[num] && num !== 30 && num !== 31)).map(num => {
                 const item = byNum.get(num);
                 const label = uiapePluginLabel(num, item?.[1]);
                 const id = uiapePluginButtonId(num, item?.[2]);
-                return `<div class="uiape-plugin-edit-row"><code>${num}</code><input type="text" data-uiape-custom-plugin-label="${num}" value="${uiapeEscapeHtml(label)}"><input type="text" data-uiape-custom-plugin-map="${num}" value="${uiapeEscapeHtml(id)}" placeholder="button-id"><button type="button" class="uiape-mini-button uiape-plugin-order-add" data-uiape-action="append-plugin-order" data-uiape-plugin-num="${num}" title="Add ${num} to order">+</button><button type="button" class="uiape-mini-button uiape-plugin-order-remove" data-uiape-action="remove-plugin-order" data-uiape-plugin-num="${num}" title="Remove ${num} from order">-</button></div>`;
+                const deleteButtonHtml = byNum.has(num) ? "<span></span>" : `<button type="button" class="uiape-mini-button uiape-plugin-order-remove" data-uiape-action="delete-custom-plugin" data-uiape-plugin-num="${num}" title="Delete custom button ${num}">\u2715</button>`;
+                return `<div class="uiape-plugin-edit-row"><code>${num}</code><input type="text" data-uiape-custom-plugin-label="${num}" value="${uiapeEscapeHtml(label)}"><input type="text" data-uiape-custom-plugin-map="${num}" value="${uiapeEscapeHtml(id)}" placeholder="button-id"><button type="button" class="uiape-mini-button uiape-plugin-order-add" data-uiape-action="append-plugin-order" data-uiape-plugin-num="${num}" title="Add ${num} to order">+</button><button type="button" class="uiape-mini-button uiape-plugin-order-remove" data-uiape-action="remove-plugin-order" data-uiape-plugin-num="${num}" title="Remove ${num} from order">-</button>${deleteButtonHtml}</div>`;
               }).join("")}
             </div>
             <button type="button" class="uiape-mini-button" data-uiape-action="add-plugin-map-row">Add custom button number</button>
+            ` : ""}
           `;
         }
 
@@ -3559,13 +3524,10 @@ function createUiapConfigLauncher() {
             const visibleDefs = uiapeControlSections[sectionName].filter(uiapeIsControlVisibleForCurrentUser);
             const rendered = visibleDefs.map(uiapeRenderControl);
 
-            // "rds" and "plugins" always render extra content below the plain controls,
-            // so they're never considered empty even if every checkbox/input is admin-only.
+            // "rds" and "plugins" render extra content, so they're never considered empty even if every field is admin-only
             const hasExtraContent = sectionName === "rds" || sectionName === "plugins";
             if (sectionName === "rds") {
-              // Insert right after RDS_ICON_PRESET (its own trigger) instead of at the
-              // section's end, so the dropdown and its editor stay adjacent. Falls back to
-              // the end if that row is hidden from this user (e.g. marked admin-only).
+              // Inserted right after RDS_ICON_PRESET so the dropdown and its editor stay adjacent
               const presetIndex = visibleDefs.findIndex(def => def[0] === "RDS_ICON_PRESET");
               rendered.splice(presetIndex === -1 ? rendered.length : presetIndex + 1, 0, uiapeRenderRdsPresetEditor());
             }
@@ -3584,9 +3546,7 @@ function createUiapConfigLauncher() {
           uiapeApplySearchFilter();
         }
 
-        // Re-applies the current search query's row/section visibility - called after every
-        // full re-render (uiapeRenderAllControls) so search state survives things like preset
-        // switches or reset-to-default clicks, and directly from the search input's own listener.
+        // Re-applies the search query's row/section visibility, called after every re-render so it survives things like preset switches
         function uiapeApplySearchFilter() {
           const searchInput = panel.querySelector("#uiape-config-search-input");
           const query = (searchInput?.value || "").trim().toLowerCase();
@@ -3594,10 +3554,7 @@ function createUiapConfigLauncher() {
           panel.querySelectorAll(".uiape-config-section").forEach(sectionEl => {
             const rows = sectionEl.querySelectorAll(".uiape-config-row");
             if (!query) {
-              // .uiape-config-row sets its own "display: grid", which overrides the browser's
-              // default "[hidden] { display: none }" rule - so hiding/showing rows must go
-              // through an inline style instead of the hidden property (unlike sections, which
-              // don't set their own display and so can safely use .hidden further below).
+              // Rows use display grid, which overrides the hidden attribute, so use an inline style instead
               rows.forEach(rowEl => { rowEl.style.display = ""; });
               // Restore the section's own non-search hidden state.
               sectionEl.hidden = sectionEl.dataset.uiapeEmpty === "true";
@@ -3698,8 +3655,7 @@ function createUiapConfigLauncher() {
             } else if (idx !== -1) {
               current.splice(idx, 1);
             }
-            // Mark as decided either way, so a future default-list change never
-            // silently overrides this specific choice again.
+            // Marks it decided so a future default change won't silently override this choice
             if (!currentSeen.includes(adminOnlyKey)) currentSeen.push(adminOnlyKey);
             updateUiapConfig("ADMIN_ONLY_KEYS", current);
             updateUiapConfig("ADMIN_ONLY_KEYS_SEEN", currentSeen);
@@ -3712,7 +3668,7 @@ function createUiapConfigLauncher() {
               ...(UIAPE_DEFAULT_CONFIG.PLUGIN_BUTTON_CUSTOM_LABELS || {}),
               ...(getUiapPanelConfig().PLUGIN_BUTTON_CUSTOM_LABELS || {})
             };
-            labels[customPluginLabel] = field.value || `Custom Plugin (${customPluginLabel})`;
+            labels[customPluginLabel] = field.value || uiapeDefaultCustomPluginLabel(customPluginLabel);
             updateUiapConfig("PLUGIN_BUTTON_CUSTOM_LABELS", labels);
             uiapeRenderAllControls();
             return;
@@ -3747,6 +3703,17 @@ function createUiapConfigLauncher() {
           }
 
           updateUiapConfig(key, value);
+
+          // Automatically select "Enable UI Addon Icons Style" if "Enable UI Addon Icons Style on mobile"
+          // is selected, to highlight to the user that both are required.
+          if (key === "RDS_ICON_STYLE_MOBILE" && value && !getUiapPanelConfig().RDS_ICON_STYLE) {
+            updateUiapConfig("RDS_ICON_STYLE", true);
+            const parentField = panel.querySelector('[data-uiape-key="RDS_ICON_STYLE"]');
+            if (parentField) parentField.checked = true;
+            uiapeSyncResetButton(parentField?.closest(".uiape-config-control"), "RDS_ICON_STYLE", "plain");
+            uiapeSyncAdminDiffDot(parentField?.closest(".uiape-config-row")?.querySelector(".uiape-config-label"), "RDS_ICON_STYLE", "plain");
+          }
+
           uiapeSyncResetButton(field.closest(".uiape-config-control"), key, "plain");
           uiapeSyncAdminDiffDot(field.closest(".uiape-config-row")?.querySelector(".uiape-config-label"), key, "plain");
         });
@@ -3767,11 +3734,14 @@ function createUiapConfigLauncher() {
         }, { passive: false });
 
         panel.addEventListener("click", async (event) => {
-          const action = event.target?.dataset?.uiapeAction;
+          // Uses closest() rather than event.target directly, since a click can land on nested
+          // markup (e.g. the reset icon's inner span) rather than the actionable element itself
+          const actionTarget = event.target?.closest?.("[data-uiape-action]");
+          const action = actionTarget?.dataset?.uiapeAction;
           if (!action) return;
 
           if (action === "reset-field") {
-            const key = event.target.dataset.uiapeResetKey;
+            const key = actionTarget.dataset.uiapeResetKey;
             if (key) {
               updateUiapConfig(key, uiapeBaselineValue(key));
               uiapeRenderAllControls();
@@ -3780,7 +3750,7 @@ function createUiapConfigLauncher() {
           }
 
           if (action === "reset-preset-field") {
-            const key = event.target.dataset.uiapeResetKey;
+            const key = actionTarget.dataset.uiapeResetKey;
             if (key) {
               uiapeUpdateUserPresetField(key, uiapeArrayText(uiapeBaselinePresetValue(key)));
               uiapeRenderAllControls();
@@ -3819,17 +3789,38 @@ function createUiapConfigLauncher() {
               ...UIAPE_PLUGIN_BUTTON_DEFAULTS.map(item => item[0]),
               ...Object.keys(map).map(Number).filter(Number.isFinite)
             ];
-            const nextNum = Math.max(35, ...existingNums) + 1;
+            const nextNum = Math.max(94, ...existingNums) + 1;
             map[nextNum] = "";
-            labels[nextNum] = `Custom Plugin (${nextNum})`;
+            labels[nextNum] = uiapeDefaultCustomPluginLabel(nextNum);
             updateUiapConfig("PLUGIN_BUTTON_CUSTOM_MAP", map);
             updateUiapConfig("PLUGIN_BUTTON_CUSTOM_LABELS", labels);
             uiapeRenderAllControls();
             return;
           }
 
+          if (action === "delete-custom-plugin") {
+            const num = actionTarget?.dataset?.uiapePluginNum;
+            if (num) {
+              const config = getUiapPanelConfig();
+              const map = { ...(config.PLUGIN_BUTTON_CUSTOM_MAP || {}) };
+              const labels = { ...(config.PLUGIN_BUTTON_CUSTOM_LABELS || {}) };
+              delete map[num];
+              delete labels[num];
+              updateUiapConfig("PLUGIN_BUTTON_CUSTOM_MAP", map);
+              updateUiapConfig("PLUGIN_BUTTON_CUSTOM_LABELS", labels);
+
+              const orderField = panel.querySelector('[data-uiape-key="PLUGINS_USER_ORDER"]');
+              const current = String(orderField?.value || "").split(",").map(x => x.trim()).filter(Boolean);
+              const next = current.filter(x => x !== String(num));
+              if (orderField) orderField.value = next.join(", ");
+              updateUiapConfig("PLUGINS_USER_ORDER", next.join(", "));
+            }
+            uiapeRenderAllControls();
+            return;
+          }
+
           if (action === "append-plugin-order") {
-            const num = event.target?.dataset?.uiapePluginNum;
+            const num = actionTarget?.dataset?.uiapePluginNum;
             const orderField = panel.querySelector('[data-uiape-key="PLUGINS_USER_ORDER"]');
             if (num && orderField) {
               const current = String(orderField.value || "").split(",").map(x => x.trim()).filter(Boolean);
@@ -3841,7 +3832,7 @@ function createUiapConfigLauncher() {
           }
 
           if (action === "remove-plugin-order") {
-            const num = event.target?.dataset?.uiapePluginNum;
+            const num = actionTarget?.dataset?.uiapePluginNum;
             const orderField = panel.querySelector('[data-uiape-key="PLUGINS_USER_ORDER"]');
             if (num && orderField) {
               const current = String(orderField.value || "").split(",").map(x => x.trim()).filter(Boolean);
@@ -3889,10 +3880,7 @@ function createUiapConfigLauncher() {
 
     attachLauncher();
 
-    // Debounced: attachLauncher() itself inserts/removes nodes under document.body, which
-    // this same observer watches - without capping the rate, an unstable findUiapHost()
-    // result (e.g. a host element with flickering/animating dimensions) could re-trigger
-    // attachLauncher() as fast as mutations queue up instead of settling within a frame or two.
+    // Debounced, attachLauncher() mutates the same subtree this observer watches, so an unstable host could otherwise retrigger it endlessly
     const observer = new MutationObserver(uiapeDebounceRaf(() => {
         const gear = document.getElementById("uiape-config-gear");
         const panel = document.getElementById("uiape-config-panel");
@@ -3910,8 +3898,7 @@ function createUiapConfigLauncher() {
         if (!gear || !panel || !gear.isConnected || !panel.isConnected) attachLauncher();
     }, 800);
 
-    // Extra repair loop for RDS/Stereo icon rebuilds: when #signalPanel is rewritten,
-    // the gear can be removed with innerHTML. Reattach it without touching saved settings.
+    // Repairs the gear if a signal panel rebuild removed it via innerHTML
     setInterval(() => {
         const host = findUiapHost() || document.getElementById("uiape-config-fallback-host");
         const gear = document.getElementById("uiape-config-gear");
@@ -3941,10 +3928,7 @@ if (document.readyState === "loading") {
 // Suppress all console logs
 if (HIDE_CONSOLE_LOGS) console.log = function() {};
 
-// Admin status comes from the server session (UIAPE_IS_ADMIN, set at the top of this file via
-// uiapeFetchServerConfig()), not from scanning the page for login text - that client-side check
-// could be spoofed by injecting the same text into the DOM. Anywhere admin status previously
-// relied on isTuneAuthenticated now uses uiapeDetectAdminSession() / UIAPE_IS_ADMIN instead.
+// Admin status comes from the server session, not page text scanning, which could be spoofed via the DOM
 if (UIAPE_IS_ADMIN) {
     console.log(`[${pluginName}] Logged in as administrator`);
 }
@@ -3959,11 +3943,7 @@ uiapeLiveStyleElement = styleElement;
 document.head.insertBefore(styleElement, uiapeStyleAnchor);
 
 // +++++++++++++++ STEP 4b (start) +++++++++++++++ //
-// DOM/behavioral feature blocks start here and run down through the rest of the file.
-// If your new feature resembles one already below (e.g. CANVAS FADE, FMLIST BUTTON,
-// MOVE MOBILE TRAY, TUNE DELAY), place its "if (MY_NEW_FEATURE) { ... }" block next
-// to that one instead of here - proximity to similar features matters more than
-// being first.
+// Place a new feature block next to a similar existing one below, not necessarily first
 
 if (STEREO_ICON_COLOR !== "default") {
     const styleId = "custom-circle-style";
@@ -4576,10 +4556,7 @@ if (MOVE_MOBILE_TRAY_TO_TOP) {
             const mobileTray = document.getElementById("mobileTray");
             const playButton = mobileTray?.querySelector(".playbutton");
 
-            // This whole feature is mobile-only (matches the 720px breakpoint used just below
-            // for the content padding). Without this check, HIDE_MOBILE_TRAY's inline
-            // "display: block" on the tray/play button overrides the .hide-desktop class's
-            // CSS rule regardless of viewport, leaving the play button visible on desktop too.
+            // Without this, HIDE_MOBILE_TRAY's inline display block would leave the play button visible on desktop too
             const isMobileViewport = window.innerWidth < 720;
 
             if (mobileTray && isMobileViewport) {
@@ -4627,8 +4604,7 @@ if (MOVE_MOBILE_TRAY_TO_TOP) {
                     });
                 }
             } else if (mobileTray && !isMobileViewport) {
-                // Resized back up to desktop width: clear any inline overrides from a previous
-                // mobile-width pass so .hide-desktop's own CSS rule can hide the tray again.
+                // Clears inline overrides from a previous mobile pass so .hide-desktop can hide the tray again
                 ["position", "top", "left", "width", "zIndex", "display", "background", "backdropFilter", "border", "boxShadow", "padding"].forEach(prop => {
                     mobileTray.style[prop] = "";
                 });
@@ -4660,9 +4636,7 @@ if (HIDE_MOBILE_TRAY && !MOVE_MOBILE_TRAY_TO_TOP) {
     uiapeOnDomReady(function () {
         const mobileTray = document.querySelector("div#mobileTray.hide-desktop");
 
-        // Mobile-only, same 720px breakpoint used elsewhere in this file. Without this,
-        // the inline "display: block" below overrides .hide-desktop's own CSS rule
-        // regardless of viewport, leaving the play button visible on desktop too.
+        // Without this, the inline display block below would leave the play button visible on desktop too
         if (mobileTray && window.innerWidth < 720) {
             // Hide all except .playbutton
             const children = Array.from(mobileTray.children);
@@ -4826,7 +4800,7 @@ setInterval(function() {
 }, 5000);
 
 // ### ALWAYS SHOW USERS ONLINE ON MOBILE DEVICES ### //
-// Skipped when MOBILE_STATUS_BAR is also on - moveButtons() then owns positioning this element instead, to avoid both fighting over position/top/right.
+// Skipped when MOBILE_STATUS_BAR is also on, moveButtons owns positioning then instead
 if (!MOBILE_STATUS_BAR && /Mobi|Android/i.test(navigator.userAgent) && !window.matchMedia("(orientation: landscape)").matches) {
     let styleElementUsers = document.createElement('style');
         styleElementUsers.textContent = `
@@ -5154,10 +5128,7 @@ setTimeout(function() {
 }
 
 // #################### RDS FLAG INDICATOR #################### //
-// Runs unconditionally (not gated behind "if (RDS_FLAG_INDICATOR)") so the
-// toggle itself is live: handle_RDS_FLAG_INDICATOR reads the current config on
-// every message and adds/removes the bullet accordingly, instead of the setup
-// only existing when the flag happened to be true at page load.
+// Runs unconditionally so the toggle stays live, handle_RDS_FLAG_INDICATOR reads current config on every message
 let uiapeRdsFlagLastProcessedTime = 0;
 let uiapeRdsFlagReconnectAttempts = 0;
 let uiapeRdsFlagDomReady = false;
@@ -5240,11 +5211,7 @@ uiapeConnectRdsFlagWebSocket();
 
 // #################### MULTIPATH INDICATOR #################### //
 
-// Runs unconditionally on wide-enough viewports (not gated behind
-// "if (MULTIPATH_INDICATOR)") so the toggle itself is live: addRandomIcon reads
-// the current config on every call and adds/removes/rebuilds the icon
-// accordingly, instead of the setup only existing when the flag happened to be
-// true at page load.
+// Runs unconditionally so the toggle stays live, addRandomIcon reads current config on every call
 if (innerWidth > 360) {
 // PTY padding
 const flagsContainer = document.querySelector('#flags-container-desktop.panel-33.user-select-none');
@@ -5439,10 +5406,7 @@ function addRandomIcon(result) {
         : document.querySelector('.wrapper-outer #wrapper .flex-container .flex-container #flags-container-desktop.panel-33.user-select-none span.pointer.stereo-container');
 
   if (targetSpan) {
-    // Search the whole document, not just the new target's parent - the previous
-    // icon can live under a different parent if MULTIPATH_ATTACH_TO just changed
-    // (pre-existing bug, shared with the original plugin, only ever visible now
-    // that attach-to no longer requires a reload).
+    // Searches the whole document since the previous icon may sit under a different parent if attach-to just changed
     const existingIcon = document.querySelector('span.multipath-container');
     if (existingIcon) {
       existingIcon.remove();
@@ -5459,9 +5423,7 @@ function addRandomIcon(result) {
     iconSpan.style.verticalAlign = 'middle';
     iconSpan.style.fontSize = '16px';
     iconSpan.style.position = 'relative';
-    // Centers the icon and text children via flexbox instead of relying on their individual
-    // inline vertical-align/baseline metrics, which shift as the text's own height changes
-    // with MULTIPATH_TEXT_SIZE - that's what was pushing the icon upward as text grew.
+    // Centers icon and text via flexbox, avoiding baseline shifts as text height changes
     iconSpan.style.display = 'inline-flex';
     iconSpan.style.alignItems = 'center';
 
@@ -5492,7 +5454,7 @@ function addRandomIcon(result) {
     const showMultipathIcon = displayMode !== "TEXT";
     const showMultipathText = displayMode !== "ICON";
 
-    const signalText = (Number.isFinite(uiapeMultipathSig) && uiapeMultipathSigDisplay !== "") ? uiapeMultipathSigDisplay : "-";
+    const signalText = (Number.isFinite(uiapeMultipathSig) && uiapeMultipathSigDisplay !== "") ? Number(uiapeMultipathSig.toFixed(2)) + SIGNAL_OFFSET : "-";
     const multipathText = uiapeMultipathTooltipSigRaw || "-";
     const tooltipText = `Multipath/Co-channel indicator. <br><strong>Signal: ${signalText} dBf, Multipath: ${multipathText}`;
 
@@ -5522,9 +5484,7 @@ function addRandomIcon(result) {
   }
 }
 
-// Exposes addRandomIcon to uiapeAfterConfigChange (defined earlier, at top-level
-// scope, outside this gated block) so MULTIPATH_INDICATOR and its sub-settings
-// can re-apply immediately instead of waiting for the next signal message.
+// Lets uiapeAfterConfigChange re-apply multipath settings immediately instead of waiting for the next signal message
 uiapeReapplyMultipathIndicator = () => addRandomIcon(uiapeLastMultipathResult);
 
 addRandomIcon(false);
@@ -5657,7 +5617,7 @@ uiapeOnDomReady(() => {
     userLockTuning();
 
     function userUnlockTuning(tuneDelay) {
-      // Cancel the pending lock-icon insert immediately - it's fixed to page-load time and can otherwise still fire after this unlock is already decided.
+      // Cancels the pending lock icon, otherwise it can still fire after unlock is already decided
       clearTimeout(lockIconTimeoutId);
       setTimeout(() => {
         lockTuning = false;
@@ -5873,9 +5833,7 @@ uiapeOnDomReady(() => {
 }
 
 // +++++++++++++++ STEP 4b (fallback) +++++++++++++++ //
-// End of the DOM/behavioral feature blocks. If your new feature doesn't resemble
-// anything above, add its own new section here: a header comment followed by
-// "if (MY_NEW_FEATURE) { ... }", same shape as the sections above it.
+// If a new feature doesn't resemble anything above, add its own section here in the same shape
 
 // #################### DEFAULT SIGNAL UNIT #################### //
 
@@ -5903,18 +5861,16 @@ if (VOLUME_PERCENTAGE_TOAST) uiapeSetupVolumeToast();
 
 // #################### SORT PLUGIN BUTTON ORDER #################### //
 
-// SORT_PLUGIN_BUTTONS / PLUGINS_USER_ORDER now live in uiapeBuildLiveCss() (see UIAPE_LIVE_CSS_KEYS)
-// so the ordering CSS applies instantly from the panel without needing a reload.
+// Ordering CSS applies instantly from the panel via uiapeBuildLiveCss, no reload needed
 
-if (!IS_VISUALEQ_PLUGIN_ENABLED && (RDS_ICON_STYLE || LED_GLOW_EFFECT_ICONS_METRICS_MONITOR_PLUGIN || RDS_ICON_STYLE_REMOVE_RDS_ICON) && innerWidth > 360) {
+// A named function (not a bare if-block) so enabling RDS_ICON_STYLE later, without the
+// sibling flags below, can still invoke this on demand instead of only running once at load.
+function uiapeInitRdsIconStylePanel() {
+uiapeRdsIconStylePanelReady = true;
 
 const isFirefox = /firefox/i.test(navigator.userAgent);
 
-// Preset resolution used to be a fixed snapshot here (ACTIVE_PRESET etc, computed
-// once from RDS_ICON_PRESET at load). It's now resolved fresh on every call via
-// uiapeGetActiveRdsPreset()/uiapeResolveLiveRdsIconHeight() (top-level, near
-// uiapeBuildLiveCss), so insertSignalPanel() can safely rebuild the icon panel
-// whenever RDS_ICON_PRESET or RDS_ICON_STYLE_PRESETS changes.
+// Preset resolves fresh on every call, so insertSignalPanel can safely rebuild on preset changes
 
 /////////////////////////////////////////////////////////////////
 ///                                                           ///
@@ -5991,7 +5947,7 @@ style.innerHTML = `
   display: none !important;
 }
 
-${RDS_ICON_STYLE ? `
+${getUiapPanelConfig().RDS_ICON_STYLE ? `
 /* PTY Label (Enhanced-owned row only; Metrics Monitor styles its own #ptyLabel) */
 #ptyLabel {
   font-size: 13px;
@@ -6238,7 +6194,7 @@ function ensurePtyOverlayIcon() {
         const ptyLabel = document.getElementById("ptyLabel");
         if (ptyLabel && ptyLabel.parentNode) {
             ptyLabel.parentNode.style.position = "relative";
-            if (RDS_ICON_STYLE) ptyLabel.parentNode.appendChild(icon);
+            if (getUiapPanelConfig().RDS_ICON_STYLE) ptyLabel.parentNode.appendChild(icon);
         }
     }
     return icon;
@@ -6247,10 +6203,7 @@ function ensurePtyOverlayIcon() {
 let lastBwUpdate = 0; // Used for bandwidth
 
 function handleTextSocketMessage(message) {
-  // Re-read config-derived values on every message (instead of the module-level
-  // snapshots taken at page load) so colour/glow/opacity settings below apply
-  // in real time, since this handler already fires continuously as station
-  // data streams in.
+  // Re-reads config on every message so colour/glow/opacity settings apply in real time
   const liveRdsCfg = getUiapPanelConfig();
   const MS_INDICATOR_COLOR = liveRdsCfg.MS_INDICATOR_COLOR;
   const MS_INDICATOR_COLOR_OFF = liveRdsCfg.MS_INDICATOR_COLOR_OFF;
@@ -6377,9 +6330,7 @@ function handleTextSocketMessage(message) {
       const eccSpan = document.querySelector('.data-flag');
       if (eccSpan && eccSpan.innerHTML.trim() !== "") {
       const newSpan = eccSpan.cloneNode(true);
-      // Total left+right margin is fixed at UIAPE_ECC_FLAG_RESERVED_WIDTH so eccWrapper's width
-      // always matches the no-ECC placeholder's (later icons never shift); ECC_FLAG_SPACING only
-      // moves the flag's own visual position by shifting how that fixed amount is split.
+      // Fixed total width keeps later icons from shifting, ECC_FLAG_SPACING only splits it differently
       const eccFlagLeftInset = Number(eccPreset.ECC_FLAG_SPACING) || 0;
       newSpan.style.marginLeft = eccFlagLeftInset + 'px';
       newSpan.style.marginRight = (UIAPE_ECC_FLAG_RESERVED_WIDTH - eccFlagLeftInset) + 'px';
@@ -6722,8 +6673,7 @@ function handleTextSocketMessage(message) {
     }
 
     function clearRdsIndicatorInlinePaint(rdsIcon) {
-        // Keep the original image-based rendering intact. Only clear properties
-        // that were introduced by earlier mask experiments.
+        // Keeps the original image based rendering intact
         rdsIcon.style.filter = '';
         rdsIcon.style.backgroundColor = '';
         rdsIcon.style.webkitMaskImage = '';
@@ -7017,9 +6967,7 @@ function createIconElement(iconType, preset) {
       const eccSpan = document.querySelector('.data-flag');
       if (eccSpan && eccSpan.innerHTML.trim() !== "") {
         const eccClone = eccSpan.cloneNode(true);
-        // Total left+right margin is fixed at UIAPE_ECC_FLAG_RESERVED_WIDTH so eccWrapper's width
-        // always matches the no-ECC placeholder's (later icons never shift); ECC_FLAG_SPACING only
-        // moves the flag's own visual position by shifting how that fixed amount is split.
+        // Fixed total width keeps later icons from shifting, ECC_FLAG_SPACING only splits it differently
         const eccFlagLeftInset = Number(preset.ECC_FLAG_SPACING) || 0;
         eccClone.style.marginLeft = eccFlagLeftInset + 'px';
         eccClone.style.marginRight = (UIAPE_ECC_FLAG_RESERVED_WIDTH - eccFlagLeftInset) + 'px';
@@ -7163,30 +7111,44 @@ function createIconRow(iconList, isFirstRow, preset) {
   return row;
 }
 
-// Re-resolves the active preset from live config on every call (instead of using
-// the RDS_ICON_STYLE_FIRST_ROW/SECOND_ROW snapshots taken once at load), and always
-// clears/rebuilds #flags-container-desktop from scratch, so this is safe to call
-// again whenever RDS_ICON_PRESET or RDS_ICON_STYLE_PRESETS changes.
+// Re-resolves the preset live and rebuilds from scratch, safe to call again on preset changes
 function insertSignalPanel() {
-  // On the first call this renames the container's id to #signalPanel, so a
-  // rebuild (preset/order change) must also look it up by that id - otherwise
-  // every call after the first silently no-ops here.
-  const signalPanelElement = document.querySelector('#flags-container-desktop') || document.querySelector('#signalPanel');
-  if (!signalPanelElement) {
-    console.error(`[${pluginName}] Signal panel container not found.`);
+  // #signalPanel that exists but belongs to another plugin is to remain untouched.
+  let signalPanelElement = document.getElementById('signalPanel');
+  if (signalPanelElement && signalPanelElement.dataset.uiapeOwned !== 'true') {
+    console.warn(`[${pluginName}] #signalPanel is owned by other code, leaving RDS icon style panel disabled.`);
     return;
+  }
+
+  const nativeContainer = document.querySelector('#flags-container-desktop');
+  if (!nativeContainer && !signalPanelElement) {
+    console.warn(`[${pluginName}] Standard flags panel not found, leaving RDS icon style panel disabled.`);
+    return;
+  }
+
+  // Hides the native flags panel instead of replacing it, so disabling this can restore it live
+  if (nativeContainer) nativeContainer.style.display = 'none';
+
+  if (!signalPanelElement) {
+    signalPanelElement = document.createElement('div');
+    signalPanelElement.id = 'signalPanel';
+    signalPanelElement.dataset.uiapeOwned = 'true';
+    if (nativeContainer) {
+      signalPanelElement.className = nativeContainer.className;
+      nativeContainer.insertAdjacentElement('afterend', signalPanelElement);
+    } else {
+      document.body.appendChild(signalPanelElement);
+    }
   }
 
   const preset = uiapeGetActiveRdsPreset(getUiapPanelConfig());
 
-  // The config gear button lives as a direct child of this same element (see
-  // findUiapHost()/attachLauncher()). innerHTML below would delete it, which a
-  // watchdog elsewhere detects and "fixes" by tearing down and recreating the
-  // config panel from scratch - closing it while a user is mid-edit. Detach and
-  // reattach it synchronously so it's never actually missing when observed.
-  const existingGear = signalPanelElement.querySelector(':scope > #uiape-config-gear');
+  // Looks up the gear wherever it currently lives, not just inside this panel, since the first
+  // enable moves it here from the native container. Moving it synchronously like this keeps it
+  // matching findUiapHost() immediately, so the self-healing observer never sees a mismatch and
+  // rebuilds (closing) the whole settings panel.
+  const existingGear = document.getElementById('uiape-config-gear');
 
-  signalPanelElement.id = 'signalPanel';
   signalPanelElement.innerHTML = '';
 
   if (existingGear) signalPanelElement.appendChild(existingGear);
@@ -7229,10 +7191,26 @@ function insertSignalPanel() {
   }
 }
 
-// Exposes insertSignalPanel to uiapeAfterConfigChange (defined earlier, at top-level
-// scope, outside this gated block) so an RDS_ICON_PRESET/RDS_ICON_STYLE_PRESETS
-// change can rebuild the panel without a reload.
+// Lets uiapeAfterConfigChange rebuild the panel on a preset change without a reload
 uiapeRebuildRdsIconPanel = insertSignalPanel;
+
+// Reverses insertSignalPanel, removes the custom panel and shows the native flags panel again
+function uiapeTeardownRdsIconStylePanel() {
+  const signalPanelElement = document.getElementById('signalPanel');
+  const nativeContainer = document.querySelector('#flags-container-desktop');
+  // #signalPanel that exists but belongs to another plugin is to be left alone
+  if (signalPanelElement && signalPanelElement.dataset.uiapeOwned === 'true' && nativeContainer) {
+    // Moves the gear back onto the native panel first, matching findUiapHost() immediately so the
+    // self-healing observer doesn't see a mismatch and rebuild (closing) the settings panel
+    const existingGear = signalPanelElement.querySelector(':scope > #uiape-config-gear');
+    if (existingGear) nativeContainer.appendChild(existingGear);
+    signalPanelElement.remove();
+  }
+  if (nativeContainer) nativeContainer.style.display = '';
+}
+
+// Lets uiapeAfterConfigChange call this from outside the ENABLE_PLUGIN gate, which hides the function's own name
+uiapeTeardownRdsIconStylePanelFn = uiapeTeardownRdsIconStylePanel;
 
 //
 // --------------------------------------------------------------
@@ -7240,18 +7218,23 @@ uiapeRebuildRdsIconPanel = insertSignalPanel;
 // --------------------------------------------------------------
 //
 function initMetricsMonitor() {
-  if (RDS_ICON_STYLE) insertSignalPanel();
+  if (getUiapPanelConfig().RDS_ICON_STYLE) insertSignalPanel();
   setupTextSocket();
 }
 
-// Must run unconditionally (like the original's DOMContentLoaded path); a readyState check here would skip setupTextSocket() since this async file resumes after DOM ready.
+// Must run unconditionally, a readyState check here would skip setupTextSocket since this async file resumes after DOM ready
 uiapeOnDomReady(initMetricsMonitor);
 
 }
 
-// PANEL_STYLE_EFFECT / PANEL_STYLE_EFFECT_SIGNAL_PANEL now live in uiapeBuildLiveCss()
-// (see UIAPE_LIVE_CSS_KEYS) so the panel styling applies instantly from the panel
-// without needing a reload.
+// Lets uiapeAfterConfigChange call this from outside the ENABLE_PLUGIN gate, which hides the function's own name
+uiapeInitRdsIconStylePanelFn = uiapeInitRdsIconStylePanel;
+
+if (!IS_VISUALEQ_PLUGIN_ENABLED && (RDS_ICON_STYLE || LED_GLOW_EFFECT_ICONS_METRICS_MONITOR_PLUGIN || RDS_ICON_STYLE_REMOVE_RDS_ICON) && innerWidth > 360) {
+  uiapeInitRdsIconStylePanel();
+}
+
+// These live in uiapeBuildLiveCss now, so panel styling applies instantly without a reload
 
 if (REPLACE_MPX_LOGO_WITH_STEREO_LOGO_METRICS_MONITOR_PLUGIN) {
 uiapeOnDomReady(function () {
@@ -7367,8 +7350,7 @@ function checkUpdate(setupOnly, pluginName, urlUpdateLink, urlFetchLink) {
     }
 }
 
-// UIAP config panel late z-index repair: keep the signal panel below native modal overlays,
-// but keep the gear available after RDS/Stereo icon rebuilds.
+// Keeps the signal panel below native modal overlays, and the gear available after icon rebuilds
 (function installUiapLateZIndexRepair() {
   if (window.location.pathname === '/setup') return;
   const style = document.createElement('style');
