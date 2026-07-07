@@ -821,9 +821,9 @@ async function saveUiapConfig() {
 
   // Closes the panel, live changes remain applied
   const panel = document.getElementById("uiape-config-panel");
-  const host = document.querySelector(".uiape-config-host.uiape-config-open");
   if (panel) panel.classList.remove("uiape-open");
-  if (host) host.classList.remove("uiape-config-open");
+  // A relocated gear can leave its old host still marked open, so clear every match, not just the first
+  document.querySelectorAll(".uiape-config-host.uiape-config-open").forEach(host => host.classList.remove("uiape-config-open"));
 }
 
 function updateUiapConfig(key, value) {
@@ -2940,7 +2940,9 @@ function createUiapConfigLauncher() {
         function togglePanel(force) {
           const open = typeof force === "boolean" ? force : !panel.classList.contains("uiape-open");
           panel.classList.toggle("uiape-open", open);
-          host.classList.toggle("uiape-config-open", open);
+          // Reads gear icon's current parent live rather than the host captured when this closure
+          // was created, since a signal-panel toggle can relocate the gear without rebuilding this
+          (gear.parentElement || host).classList.toggle("uiape-config-open", open);
           if (open) {
             resetUiapPanelPositionIfUnset();
             requestAnimationFrame(clampUiapPanelToViewport);
@@ -7134,7 +7136,10 @@ function insertSignalPanel() {
     signalPanelElement.id = 'signalPanel';
     signalPanelElement.dataset.uiapeOwned = 'true';
     if (nativeContainer) {
+      // Copies layout classes like uiape-config-host, but uiape-config-open is a live interaction
+      // state the gear's own host should own, not something to inherit from a snapshot
       signalPanelElement.className = nativeContainer.className;
+      signalPanelElement.classList.remove('uiape-config-open');
       nativeContainer.insertAdjacentElement('afterend', signalPanelElement);
     } else {
       document.body.appendChild(signalPanelElement);
