@@ -755,6 +755,17 @@ function getUiapPanelConfig() {
   return uiapeNormalizeConfig(UIAPE_CONFIG);
 }
 
+// VisualEQ forces a page reload whenever its own "Hide VisualEQ" toggle changes, so reading its
+// localStorage key here always reflects whether it will actually take over the flags panel on
+// this page load, not just whether the admin has it installed.
+function uiapeIsVisualEqActive(cfg) {
+  if (!cfg.IS_VISUALEQ_PLUGIN_ENABLED) return false;
+  try {
+    if (localStorage.getItem('visualeq_enabled_state') === 'false') return false;
+  } catch (error) {}
+  return true;
+}
+
 function markUiapConfigDirty() {
   UIAPE_CONFIG_DIRTY = true;
   const panel = document.getElementById("uiape-config-panel");
@@ -947,7 +958,7 @@ function uiapeAfterConfigChange(key) {
     if (cfg.RDS_ICON_STYLE) {
       if (uiapeRdsIconStylePanelReady) {
         if (uiapeRebuildRdsIconPanel) uiapeRebuildRdsIconPanel();
-      } else if (!cfg.IS_VISUALEQ_PLUGIN_ENABLED && window.innerWidth > 360) {
+      } else if (!uiapeIsVisualEqActive(cfg) && window.innerWidth > 360) {
         if (uiapeInitRdsIconStylePanelFn) uiapeInitRdsIconStylePanelFn();
       }
     } else if (uiapeRdsIconStylePanelReady && uiapeTeardownRdsIconStylePanelFn) {
@@ -1371,7 +1382,7 @@ function uiapeBuildLiveCss(cfg) {
   }
 
   // RDS icon scale located here to decouple from "Metrics icon glow" for Metrics Monitor.
-  if (!cfg.IS_VISUALEQ_PLUGIN_ENABLED && window.innerWidth > 360 && parseFloat(cfg.RDS_ICON_SCALE) !== 100) {
+  if (!uiapeIsVisualEqActive(cfg) && window.innerWidth > 360 && parseFloat(cfg.RDS_ICON_SCALE) !== 100) {
     css += `
 #signalPanel > *:where(:not(#uiape-config-gear, #uiape-config-panel)) {
     transform: scale(${uiapeCssScaleValue(cfg.RDS_ICON_SCALE)});
@@ -1382,13 +1393,13 @@ function uiapeBuildLiveCss(cfg) {
 
   // Live overrides for RDS icon settings, only apply if the master feature was already on at page load
   if (
-    !cfg.IS_VISUALEQ_PLUGIN_ENABLED &&
+    !uiapeIsVisualEqActive(cfg) &&
     (cfg.RDS_ICON_STYLE || cfg.LED_GLOW_EFFECT_ICONS_METRICS_MONITOR_PLUGIN || cfg.RDS_ICON_STYLE_REMOVE_RDS_ICON) &&
     window.innerWidth > 360
   ) {
     const rdsPreset = uiapeGetActiveRdsPreset(cfg);
     const stereoCssScale = uiapeCssScaleValue(cfg.STEREO_ICON_SCALE, 1);
-    const rdsGlowEnabled = !cfg.IS_VISUALEQ_PLUGIN_ENABLED && (cfg.LED_GLOW_EFFECT_ICONS && (cfg.RDS_ICON_STYLE || cfg.LED_GLOW_EFFECT_ICONS_METRICS_MONITOR_PLUGIN));
+    const rdsGlowEnabled = !uiapeIsVisualEqActive(cfg) && (cfg.LED_GLOW_EFFECT_ICONS && (cfg.RDS_ICON_STYLE || cfg.LED_GLOW_EFFECT_ICONS_METRICS_MONITOR_PLUGIN));
 
     css += `
 ${cfg.RDS_ICON_STYLE_REMOVE_RDS_ICON === true ? `
@@ -1911,7 +1922,6 @@ const STEREO_ICON_COLOR_OFF = UIAPE_CONFIG.STEREO_ICON_COLOR_OFF;
 const RDS_ICON_STYLE = UIAPE_CONFIG.RDS_ICON_STYLE;
 const RDS_ICON_STYLE_MOBILE = UIAPE_CONFIG.RDS_ICON_STYLE_MOBILE;
 const METRICS_MONITOR_PLUGIN_IS_INSTALLED = UIAPE_CONFIG.METRICS_MONITOR_PLUGIN_IS_INSTALLED;
-const IS_VISUALEQ_PLUGIN_ENABLED = UIAPE_CONFIG.IS_VISUALEQ_PLUGIN_ENABLED;
 
 // RDS icon style presets. See below to configure user preset.
 // Options: 0 = user-defined, 1 = preset 1, 2 = preset 2, 3 = preset 3.
@@ -5419,8 +5429,8 @@ function addRandomIcon(result) {
     const iconSpan = document.createElement('span');
     iconSpan.classList.add('multipath-container');
     //if (!cfg.METRICS_MONITOR_PLUGIN_IS_INSTALLED) {
-        iconSpan.style.marginLeft = `${!cfg.IS_VISUALEQ_PLUGIN_ENABLED && (cfg.RDS_ICON_STYLE || isRdsStyleMode) ? cfg.MULTIPATH_LEFT_PADDING : 8}px`;
-        iconSpan.style.marginTop = `${!cfg.IS_VISUALEQ_PLUGIN_ENABLED && (cfg.RDS_ICON_STYLE || isRdsStyleMode) ? 0 : 2}px`;
+        iconSpan.style.marginLeft = `${!uiapeIsVisualEqActive(cfg) && (cfg.RDS_ICON_STYLE || isRdsStyleMode) ? cfg.MULTIPATH_LEFT_PADDING : 8}px`;
+        iconSpan.style.marginTop = `${!uiapeIsVisualEqActive(cfg) && (cfg.RDS_ICON_STYLE || isRdsStyleMode) ? 0 : 2}px`;
     //}
     iconSpan.style.verticalAlign = 'middle';
     iconSpan.style.fontSize = '16px';
@@ -7235,7 +7245,7 @@ uiapeOnDomReady(initMetricsMonitor);
 // Lets uiapeAfterConfigChange call this from outside the ENABLE_PLUGIN gate, which hides the function's own name
 uiapeInitRdsIconStylePanelFn = uiapeInitRdsIconStylePanel;
 
-if (!IS_VISUALEQ_PLUGIN_ENABLED && (RDS_ICON_STYLE || LED_GLOW_EFFECT_ICONS_METRICS_MONITOR_PLUGIN || RDS_ICON_STYLE_REMOVE_RDS_ICON) && innerWidth > 360) {
+if (!uiapeIsVisualEqActive(getUiapPanelConfig()) && (RDS_ICON_STYLE || LED_GLOW_EFFECT_ICONS_METRICS_MONITOR_PLUGIN || RDS_ICON_STYLE_REMOVE_RDS_ICON) && innerWidth > 360) {
   uiapeInitRdsIconStylePanel();
 }
 
