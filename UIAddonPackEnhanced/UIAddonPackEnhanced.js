@@ -1,5 +1,5 @@
 /*
-    UI Add-on Pack Enhanced v1.0.3 by AAD
+    UI Add-on Pack Enhanced v1.0.4 by AAD
     -------------------------------------
     https://github.com/AmateurAudioDude/FM-DX-Webserver-Plugin-UI-Addon-Pack-Enhanced
 */
@@ -13,7 +13,7 @@ const UIAPE_SEARCH_INCLUDE_DESCRIPTIONS = false;
 // Signal offset in dB
 const SIGNAL_OFFSET = 0.00;
 
-const pluginVersion = '1.0.3';
+const pluginVersion = '1.0.4';
 const pluginName = "UI Add-on Pack Enhanced";
 const pluginHomepageUrl = "https://github.com/AmateurAudioDude/FM-DX-Webserver-Plugin-UI-Addon-Pack-Enhanced";
 const pluginUpdateUrl = "https://raw.githubusercontent.com/AmateurAudioDude/FM-DX-Webserver-Plugin-UI-Addon-Pack-Enhanced/refs/heads/main/UIAddonPackEnhanced/UIAddonPackEnhanced.js";
@@ -404,6 +404,7 @@ const UIAPE_DEFAULT_CONFIG = {
 
   RDS_ICON_STYLE: false,
   RDS_ICON_STYLE_MOBILE: false,
+  PTY_DISPLAY_MODE: "FULL",
   METRICS_MONITOR_PLUGIN_IS_INSTALLED: false,
   IS_VISUALEQ_PLUGIN_ENABLED: false,
 
@@ -905,6 +906,7 @@ function uiapeUpdateReloadNotice(justDirtied) {
 const UIAPE_MESSAGE_DRIVEN_KEYS = new Set([
   "MS_INDICATOR_COLOR", "MS_INDICATOR_COLOR_OFF",
   "PTY_INDICATOR_COLOR", "PTY_INDICATOR_COLOR_OFF",
+  "PTY_DISPLAY_MODE",
   "RDS_INDICATOR_ICON_COLOR", "RDS_INDICATOR_ICON_COLOR_OFF",
   "RDS_INDICATOR_ICON_GLOW_INTENSITY",
   "TP_INDICATOR_ICON_COLOR", "TP_INDICATOR_ICON_COLOR_OFF",
@@ -3169,6 +3171,7 @@ function createUiapConfigLauncher() {
           rds: [
             ["RDS_ICON_STYLE", "checkbox", "Enable UI Addon Icons Style", "Enables RDS, PTY, TP, TA icons."],
             ["RDS_ICON_STYLE_MOBILE", "checkbox", "Enable UI Addon Icons Style on mobile", "Enables UI Addon Icons Style on mobile, and turns on the setting above too since this depends on it."],
+            ["PTY_DISPLAY_MODE", "select", "Show PTY as", "Choose how PTY label is displayed.", [["FULL", "Full label"], ["SHORT", "Short label"], ["ICON_SHORT", "Icon & short label"]]],
 
             ["IS_TEF_RADIO", "checkbox", "TEF radio mode", "Uses TEF radio MP assumption."],
             ["METRICS_MONITOR_PLUGIN_IS_INSTALLED", "checkbox", "Metrics Monitor installed", "Enable if Metrics Monitor plugin is installed."],
@@ -5974,6 +5977,25 @@ ${getUiapPanelConfig().RDS_ICON_STYLE ? `
   margin: 0;
   flex-shrink: 0;
 }
+
+#ptyLabel.uiape-pty-icon-text {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .035em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+#ptyLabel.uiape-pty-icon-text i {
+  font-size: 11px;
+  line-height: 1;
+  color: inherit;
+  filter: inherit;
+}
 ` : ''}
 
 /* BW Label */
@@ -6121,6 +6143,237 @@ const PTY_TABLE = [
   "Oldies Music", "Folk Music", "Documentary"
 ];
 
+const UIAPE_PTY_ICON_BY_CODE = {
+  0: "fa-circle-question",
+  1: "fa-newspaper",
+  2: "fa-comments",
+  3: "fa-circle-info",
+  4: "fa-futbol",
+  5: "fa-graduation-cap",
+  6: "fa-masks-theater",
+  7: "fa-landmark",
+  8: "fa-microscope",
+  9: "fa-shapes",
+  10: "fa-star",
+  11: "fa-guitar",
+  12: "fa-headphones",
+  13: "fa-feather-pointed",
+  14: "fa-scroll",
+  15: "fa-compact-disc",
+  16: "fa-cloud-sun",
+  17: "fa-sack-dollar",
+  18: "fa-child-reaching",
+  19: "fa-people-group",
+  20: "fa-place-of-worship",
+  21: "fa-phone-volume",
+  22: "fa-plane-departure",
+  23: "fa-gamepad",
+  24: "fa-drum",
+  25: "fa-hat-cowboy",
+  26: "fa-earth-europe",
+  27: "fa-radio",
+  28: "fa-wheat-awn",
+  29: "fa-film",
+  30: "fa-triangle-exclamation",
+  31: "fa-bell"
+};
+
+const UIAPE_PTY_TEXT_ICON_OVERRIDES = {
+  "NO PROGRAMME TYPE DEFINED": "fa-circle-question",
+  "PTY": "fa-circle-question",
+  "NEWS": "fa-newspaper",
+  "CURRENT AFFAIRS": "fa-comments",
+  "AFFAIRS": "fa-comments",
+  "INFORMATION": "fa-circle-info",
+  "INFO": "fa-circle-info",
+  "SPORT": "fa-futbol",
+  "SPORTS": "fa-futbol",
+  "TALK": "fa-microphone-lines",
+  "EDUCATION": "fa-graduation-cap",
+  "DRAMA": "fa-masks-theater",
+  "CULTURE": "fa-landmark",
+  "SCIENCE": "fa-microscope",
+  "VARIED": "fa-shapes",
+  "VARIED SPEECH": "fa-shapes",
+  "POP MUSIC": "fa-star",
+  "POPULAR MUSIC": "fa-star",
+  "ROCK MUSIC": "fa-guitar",
+  "ROCK": "fa-guitar",
+  "CLASSIC ROCK": "fa-hand-fist",
+  "ADULT HITS": "fa-star-half-stroke",
+  "SOFT ROCK": "fa-cloud",
+  "TOP 40": "fa-fire",
+  "EASY LISTENING": "fa-headphones",
+  "EASY": "fa-headphones",
+  "LIGHT CLASSICAL": "fa-solid fa-drum",
+  "SERIOUS CLASSICAL": "fa-solid fa-drum",
+  "CLASSICAL": "fa-solid fa-drum",
+  "OTHER MUSIC": "fa-compact-disc",
+  "COUNTRY MUSIC": "fa-hat-cowboy",
+  "COUNTRY": "fa-hat-cowboy",
+  "OLDIES MUSIC": "fa-radio",
+  "OLDIES": "fa-radio",
+  "SOFT MUSIC": "fa-volume-low",
+  "NOSTALGIA": "fa-clock-rotate-left",
+  "JAZZ MUSIC": "fa-drum",
+  "JAZZ": "fa-drum",
+  "RHYTHM & BLUES": "fa-record-vinyl",
+  "R&B": "fa-record-vinyl",
+  "SOFT RHYTHM & BLUES": "fa-wave-square",
+  "SOFT R&B": "fa-wave-square",
+  "LANGUAGE": "fa-language",
+  "WEATHER": "fa-cloud-sun",
+  "FINANCE": "fa-sack-dollar",
+  "CHILDREN'S PROGRAMMES": "fa-child-reaching",
+  "CHILDREN": "fa-child-reaching",
+  "SOCIAL AFFAIRS": "fa-people-group",
+  "SOCIAL": "fa-people-group",
+  "RELIGION": "fa-place-of-worship",
+  "RELIGIOUS MUSIC": "fa-church",
+  "RELIGIOUS TALK": "fa-hands-praying",
+  "PHONE-IN": "fa-phone-volume",
+  "PERSONALITY": "fa-user-tie",
+  "TRAVEL": "fa-plane-departure",
+  "TRAVEL & TOURING": "fa-plane-departure",
+  "PUBLIC": "fa-building-columns",
+  "COLLEGE": "fa-school",
+  "LEISURE": "fa-gamepad",
+  "LEISURE & HOBBY": "fa-gamepad",
+  "NATIONAL MUSIC": "fa-earth-europe",
+  "FOLK MUSIC": "fa-wheat-awn",
+  "DOCUMENTARY": "fa-film",
+  "ALARM TEST": "fa-triangle-exclamation",
+  "EMERGENCY TEST": "fa-triangle-exclamation",
+  "ALARM": "fa-bell",
+  "EMERGENCY": "fa-bell"
+};
+
+const UIAPE_PTY_COMPACT_LABELS = {
+  "NO PROGRAMME TYPE DEFINED": "NONE",
+  "PTY": "PTY",
+  "NEWS": "NEWS",
+  "CURRENT AFFAIRS": "AFFAIRS",
+  "AFFAIRS": "AFFAIRS",
+  "INFORMATION": "INFO",
+  "INFO": "INFO",
+  "SPORT": "SPORT",
+  "SPORTS": "SPORT",
+  "TALK": "TALK",
+  "EDUCATION": "EDUCATE",
+  "DRAMA": "DRAMA",
+  "CULTURE": "CULTURE",
+  "SCIENCE": "SCIENCE",
+  "VARIED": "VARIED",
+  "VARIED SPEECH": "VARIED",
+  "POP MUSIC": "POP M",
+  "POPULAR MUSIC": "POP M",
+  "ROCK MUSIC": "ROCK M",
+  "ROCK": "ROCK",
+  "CLASSIC ROCK": "CL ROCK",
+  "ADULT HITS": "ADULT HIT",
+  "SOFT ROCK": "SOFT RCK",
+  "TOP 40": "TOP 40",
+  "EASY LISTENING": "EASY M",
+  "EASY": "EASY M",
+  "LIGHT CLASSICAL": "LIGHT M",
+  "SERIOUS CLASSICAL": "CLASSICS",
+  "CLASSICAL": "CLASSICS",
+  "OTHER MUSIC": "OTHER M",
+  "COUNTRY MUSIC": "COUNTRY",
+  "COUNTRY": "COUNTRY",
+  "OLDIES MUSIC": "OLDIES",
+  "OLDIES": "OLDIES",
+  "SOFT MUSIC": "SOFT M",
+  "NOSTALGIA": "NOSTALGA",
+  "JAZZ MUSIC": "JAZZ",
+  "JAZZ": "JAZZ",
+  "RHYTHM & BLUES": "R & B",
+  "R&B": "R & B",
+  "SOFT RHYTHM & BLUES": "SOFT R&B",
+  "SOFT R&B": "SOFT R&B",
+  "LANGUAGE": "LANGUAGE",
+  "WEATHER": "WEATHER",
+  "FINANCE": "FINANCE",
+  "CHILDREN'S PROGRAMMES": "CHILDREN",
+  "CHILDREN": "CHILDREN",
+  "SOCIAL AFFAIRS": "SOCIAL",
+  "SOCIAL": "SOCIAL",
+  "RELIGION": "RELIGION",
+  "RELIGIOUS MUSIC": "REL MUSIC",
+  "RELIGIOUS TALK": "REL TALK",
+  "PHONE-IN": "PHONE IN",
+  "PERSONALITY": "PERSNLTY",
+  "TRAVEL": "TRAVEL",
+  "TRAVEL & TOURING": "TRAVEL",
+  "PUBLIC": "PUBLIC",
+  "COLLEGE": "COLLEGE",
+  "LEISURE": "LEISURE",
+  "LEISURE & HOBBY": "LEISURE",
+  "NATIONAL MUSIC": "NATION M",
+  "FOLK MUSIC": "FOLK M",
+  "DOCUMENTARY": "DOCUMENT",
+  "ALARM TEST": "TEST",
+  "EMERGENCY TEST": "TEST",
+  "ALARM": "ALARM",
+  "EMERGENCY": "ALERT"
+};
+
+function uiapeNormalizePtyText(value) {
+  return String(value || "").trim().replace(/\s+/g, " ").toUpperCase();
+}
+
+function uiapeGetPtyIconClass(ptyText, ptyIndex) {
+  const normalized = uiapeNormalizePtyText(ptyText);
+  return UIAPE_PTY_TEXT_ICON_OVERRIDES[normalized] || UIAPE_PTY_ICON_BY_CODE[ptyIndex] || "fa-tag";
+}
+
+function uiapeGetCompactPtyLabel(ptyText) {
+  const normalized = uiapeNormalizePtyText(ptyText);
+  if (!normalized || normalized === "PTY") return "PTY";
+  if (UIAPE_PTY_COMPACT_LABELS[normalized]) return UIAPE_PTY_COMPACT_LABELS[normalized];
+  return normalized.length <= 11 ? normalized : normalized.slice(0, 11).trim();
+}
+
+function uiapeRenderPtyLabel(ptyLabel, ptyText, ptyIndex, cfg) {
+  if (!ptyLabel) return;
+
+  const displayMode = String(cfg?.PTY_DISPLAY_MODE || "FULL").toUpperCase();
+  const hasPty = ptyText !== "PTY";
+  const shortLabel = uiapeGetCompactPtyLabel(ptyText);
+
+  ptyLabel.classList.toggle("uiape-pty-icon-text", displayMode === "ICON_SHORT" && hasPty);
+  ptyLabel.setAttribute("title", ptyText);
+  ptyLabel.setAttribute("aria-label", ptyText);
+
+  if (!hasPty) {
+    ptyLabel.textContent = ptyText;
+    return;
+  }
+
+  if (displayMode === "SHORT") {
+    ptyLabel.textContent = shortLabel;
+    return;
+  }
+
+  if (displayMode !== "ICON_SHORT") {
+    ptyLabel.textContent = ptyText;
+    return;
+  }
+
+  ptyLabel.textContent = "";
+
+  const icon = document.createElement("i");
+  icon.className = `fa-solid ${uiapeGetPtyIconClass(ptyText, ptyIndex)}`;
+  icon.setAttribute("aria-hidden", "true");
+
+  const label = document.createElement("span");
+  label.className = "uiape-pty-icon-text-label";
+  label.textContent = shortLabel;
+
+  ptyLabel.appendChild(icon);
+  ptyLabel.appendChild(label);
+}
+
 // webp images
 let rds_off_webp_1, rds_on_webp_1, rds_off_webp_2, rds_on_webp_2;
 
@@ -6255,7 +6508,7 @@ function handleTextSocketMessage(message) {
     const ptyIcon = ensurePtyOverlayIcon();
 
     if (ptyLabel) {
-      ptyLabel.textContent = ptyText;
+      uiapeRenderPtyLabel(ptyLabel, ptyText, ptyIndex, liveRdsCfg);
 
       // --- message.ms ---
       ptyIcon.innerHTML = "";
