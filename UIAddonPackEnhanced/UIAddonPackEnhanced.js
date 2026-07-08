@@ -1,5 +1,5 @@
 /*
-    UI Add-on Pack Enhanced v1.0.3 by AAD
+    UI Add-on Pack Enhanced v1.0.4 by AAD
     -------------------------------------
     https://github.com/AmateurAudioDude/FM-DX-Webserver-Plugin-UI-Addon-Pack-Enhanced
 */
@@ -13,7 +13,7 @@ const UIAPE_SEARCH_INCLUDE_DESCRIPTIONS = false;
 // Signal offset in dB
 const SIGNAL_OFFSET = 0.00;
 
-const pluginVersion = '1.0.3';
+const pluginVersion = '1.0.4';
 const pluginName = "UI Add-on Pack Enhanced";
 const pluginHomepageUrl = "https://github.com/AmateurAudioDude/FM-DX-Webserver-Plugin-UI-Addon-Pack-Enhanced";
 const pluginUpdateUrl = "https://raw.githubusercontent.com/AmateurAudioDude/FM-DX-Webserver-Plugin-UI-Addon-Pack-Enhanced/refs/heads/main/UIAddonPackEnhanced/UIAddonPackEnhanced.js";
@@ -230,6 +230,8 @@ let uiapeRebuildRdsIconPanel = null;           // set inside the RDS/Stereo icon
 let uiapeRdsIconStylePanelReady = false;       // true once the signal panel has actually been built
 let uiapeInitRdsIconStylePanelFn = null;       // set inside the ENABLE_PLUGIN gate, so uiapeAfterConfigChange (declared outside it) can call it
 let uiapeTeardownRdsIconStylePanelFn = null;   // set inside the ENABLE_PLUGIN gate, so uiapeAfterConfigChange (declared outside it) can call it
+let uiapeApplyStereoGlowFn = null;             // set inside the ENABLE_PLUGIN gate, so uiapeAfterConfigChange (declared outside it) can call it
+let uiapeReapplyIndicatorColorsFn = null;      // set inside the ENABLE_PLUGIN gate, so uiapeAfterConfigChange (declared outside it) can call it
 let uiapeReapplyMultipathIndicator = null;     // set inside the multipath indicator block, if it runs
 let uiapeMobileStatusBarConnectionFn = null;   // set inside the MOBILE_STATUS_BAR_CONNECTION block, so moveButtons() can call it
 let uiapeRenderAllControlsFn = null;           // set inside attachLauncher, so saveUiapConfig can refresh reset-button visibility right after saving
@@ -365,6 +367,8 @@ const UIAPE_DEFAULT_CONFIG = {
   MULTIPATH_LEFT_PADDING: -8,
   MULTIPATH_DISPLAY_MODE: "BOTH",
   MULTIPATH_TEXT_SIZE: 105,
+  MULTIPATH_INDICATOR_COLOR: "",
+  MULTIPATH_INDICATOR_COLOR_OFF: "",
   IS_TEF_RADIO: false,
 
   TUNE_DELAY_ENABLE: false,
@@ -426,9 +430,12 @@ const UIAPE_DEFAULT_CONFIG = {
   PTY_INDICATOR_COLOR_OFF: "",
   MS_INDICATOR_COLOR: "",
   MS_INDICATOR_COLOR_OFF: "",
+  ECC_INDICATOR_COLOR_OFF: "",
 
   RDS_ICON_STYLE_REMOVE_RDS_ICON: false,
   BANDWIDTH_UPDATE_INTERVAL: 500,
+  BW_INDICATOR_COLOR: "",
+  BW_INDICATOR_COLOR_OFF: "",
 
   LED_GLOW_EFFECT_ICONS_RDS_ICON_STYLE_PTY: false,
   LED_GLOW_EFFECT_ICONS_RDS_ICON_STYLE_MS: false,
@@ -914,6 +921,7 @@ const UIAPE_MESSAGE_DRIVEN_KEYS = new Set([
   "RDS_ICON_STYLE_MS_OFF_AS_LETTERS",
   "BANDWIDTH_UPDATE_INTERVAL",
   "LED_GLOW_EFFECT_ICONS_BANDWIDTH",
+  "BW_INDICATOR_COLOR", "BW_INDICATOR_COLOR_OFF",
   "RDS_FLAG_INDICATOR"
 ]);
 
@@ -941,12 +949,19 @@ function uiapeAfterConfigChange(key) {
   }
   if (key === "STEREO_ICON_COLOR" || key === "STEREO_ICON_COLOR_OFF") {
     refreshAutoIconColorVars();
+    if (uiapeApplyStereoGlowFn) uiapeApplyStereoGlowFn();
+    uiapeRefreshLiveCss();
     return;
   }
   if (key === "RDS_ICON_PRESET" || key === "RDS_ICON_STYLE_PRESETS") {
     // Only rebuild when Enhanced owns the icon row, otherwise this would overwrite Metrics Monitor's panel
     if (uiapeRebuildRdsIconPanel && getUiapPanelConfig().RDS_ICON_STYLE) uiapeRebuildRdsIconPanel();
     uiapeRefreshLiveCss();
+    return;
+  }
+  if (key === "ECC_INDICATOR_COLOR_OFF") {
+    // Force a rebuild for immediate feedback instead of waiting for the next station message
+    if (uiapeRebuildRdsIconPanel && getUiapPanelConfig().RDS_ICON_STYLE) uiapeRebuildRdsIconPanel();
     return;
   }
   if (key === "SHOW_CUSTOM_BUTTON_EDITOR") {
@@ -975,10 +990,27 @@ function uiapeAfterConfigChange(key) {
     key === "MULTIPATH_INDICATOR" ||
     key === "MULTIPATH_ATTACH_TO" ||
     key === "MULTIPATH_LEFT_PADDING" ||
-    key === "MULTIPATH_DISPLAY_MODE"
+    key === "MULTIPATH_DISPLAY_MODE" ||
+    key === "MULTIPATH_INDICATOR_COLOR" ||
+    key === "MULTIPATH_INDICATOR_COLOR_OFF"
   ) {
     if (uiapeReapplyMultipathIndicator) uiapeReapplyMultipathIndicator();
-    if (key === "MULTIPATH_LEFT_PADDING") uiapeRefreshLiveCss();
+    // Left padding and the glow color both live in the built CSS, not on the icon element
+    if (key === "MULTIPATH_LEFT_PADDING" || key === "MULTIPATH_INDICATOR_COLOR") uiapeRefreshLiveCss();
+    return;
+  }
+  if (
+    key === "MS_INDICATOR_COLOR" || key === "MS_INDICATOR_COLOR_OFF" ||
+    key === "PTY_INDICATOR_COLOR" || key === "PTY_INDICATOR_COLOR_OFF" ||
+    key === "TP_INDICATOR_ICON_COLOR" || key === "TP_INDICATOR_ICON_COLOR_OFF" ||
+    key === "TA_INDICATOR_ICON_COLOR" || key === "TA_INDICATOR_ICON_COLOR_OFF" ||
+    key === "BW_INDICATOR_COLOR" || key === "BW_INDICATOR_COLOR_OFF" ||
+    key === "LED_GLOW_EFFECT_ICONS_RDS_ICON_STYLE_PTY" ||
+    key === "LED_GLOW_EFFECT_ICONS_RDS_ICON_STYLE_MS" ||
+    key === "LED_GLOW_EFFECT_ICONS_BANDWIDTH"
+  ) {
+    // Reapply now using each icon's last known state, rather than waiting for the next message
+    if (uiapeReapplyIndicatorColorsFn) uiapeReapplyIndicatorColorsFn();
     return;
   }
   if (UIAPE_MESSAGE_DRIVEN_KEYS.has(key)) {
@@ -1262,7 +1294,7 @@ function uiapeBuildLiveCss(cfg) {
     }
 
     .wrapper-outer #wrapper #flags-container-desktop.panel-33.user-select-none h3 .circle-container .circle,
-    .wrapper-outer #wrapper .user-select-none .circle-container .circle {
+    .wrapper-outer #wrapper .user-select-none .circle-container .circle:where(:not(#signalPanel *)) {
       background-color: rgba(255, 255, 255, var(--glow-alpha-3));
       box-shadow:
         0 0 6px rgba(255, 255, 255, var(--glow-alpha-1)),
@@ -1400,6 +1432,8 @@ function uiapeBuildLiveCss(cfg) {
     const rdsPreset = uiapeGetActiveRdsPreset(cfg);
     const stereoCssScale = uiapeCssScaleValue(cfg.STEREO_ICON_SCALE, 1);
     const rdsGlowEnabled = !uiapeIsVisualEqActive(cfg) && (cfg.LED_GLOW_EFFECT_ICONS && (cfg.RDS_ICON_STYLE || cfg.LED_GLOW_EFFECT_ICONS_METRICS_MONITOR_PLUGIN));
+    const multipathGlowRgb = uiapeHexToRgb(resolveIconColor(cfg.MULTIPATH_INDICATOR_COLOR, "") || "#FFFFFF");
+    const stereoGlowRgb = uiapeHexToRgb(resolveIconColor(cfg.STEREO_ICON_COLOR === "default" ? "" : cfg.STEREO_ICON_COLOR, "") || "#FFFFFF");
 
     css += `
 ${cfg.RDS_ICON_STYLE_REMOVE_RDS_ICON === true ? `
@@ -1458,9 +1492,9 @@ ${cfg.REPLACE_MPX_LOGO_WITH_STEREO_LOGO_METRICS_MONITOR_PLUGIN && cfg.APPLY_STER
 
 /* Multipath icon glow effect */
 #signal-icons .multipath-container.opacity-full .fa-mountain-sun {
-  filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.6))
-          drop-shadow(0 0 6px rgba(255, 255, 255, 0.4))
-          drop-shadow(0 0 9px rgba(238, 238, 238, 0.3));
+  filter: drop-shadow(0 0 3px rgba(${multipathGlowRgb.r}, ${multipathGlowRgb.g}, ${multipathGlowRgb.b}, 0.6))
+          drop-shadow(0 0 6px rgba(${multipathGlowRgb.r}, ${multipathGlowRgb.g}, ${multipathGlowRgb.b}, 0.4))
+          drop-shadow(0 0 9px rgba(${multipathGlowRgb.r}, ${multipathGlowRgb.g}, ${multipathGlowRgb.b}, 0.3));
 }
 ` : ''}
 
@@ -1483,12 +1517,12 @@ ${cfg.RDS_ICON_STYLE ? `
 ${rdsGlowEnabled ? `
 /* Stereo icon glow effect for RDS_ICON_STYLE */
 #signal-icons #stereoIcon.stereo-on .circle-container .circle {
-  background-color: rgba(255, 255, 255, 0.2);
+  background-color: rgba(${stereoGlowRgb.r}, ${stereoGlowRgb.g}, ${stereoGlowRgb.b}, 0.2);
   box-shadow:
-    0 0 6px rgba(255, 255, 255, 0.4),
-    0 0 12px rgba(238, 238, 238, 0.3),
-    0 0 18px rgba(204, 204, 204, 0.2),
-    0 0 24px rgba(170, 170, 170, 0.1);
+    0 0 6px rgba(${stereoGlowRgb.r}, ${stereoGlowRgb.g}, ${stereoGlowRgb.b}, 0.4),
+    0 0 12px rgba(${stereoGlowRgb.r}, ${stereoGlowRgb.g}, ${stereoGlowRgb.b}, 0.3),
+    0 0 18px rgba(${stereoGlowRgb.r}, ${stereoGlowRgb.g}, ${stereoGlowRgb.b}, 0.2),
+    0 0 24px rgba(${stereoGlowRgb.r}, ${stereoGlowRgb.g}, ${stereoGlowRgb.b}, 0.1);
 }
 
 #signal-icons #stereoIcon.stereo-on .circle-container .circle::after {
@@ -1797,6 +1831,15 @@ function resolveIconColor(color, fallback = "") {
   return color || fallback;
 }
 
+function uiapeHexToRgb(hex) {
+  const normalized = normalizeHexColor(hex, "#FFFFFF");
+  return {
+    r: parseInt(normalized.slice(1, 3), 16),
+    g: parseInt(normalized.slice(3, 5), 16),
+    b: parseInt(normalized.slice(5, 7), 16)
+  };
+}
+
 
 // +++++++++++++++ STEP 2 +++++++++++++++ //
 
@@ -1910,11 +1953,7 @@ const LED_GLOW_EFFECT_SMALL = UIAPE_CONFIG.LED_GLOW_EFFECT_SMALL; // Enables glo
 const LED_GLOW_EFFECT_RDSPS = UIAPE_CONFIG.LED_GLOW_EFFECT_RDSPS; // Enables glow effect for RDS PS text, which might annoy users.
 const LED_GLOW_EFFECT_FREQ = UIAPE_CONFIG.LED_GLOW_EFFECT_FREQ;  // Enables glow effect for frequency digits, which might annoy users.
 
-// Dims the PI CODE font for incomplete decodes, read live so it can apply instantly
-// Sets the hex color code for stereo icon.
-// Use a 6-digit hex color, e.g. "#FF0000" for bright red, "auto" for the theme accent, or "default" for native styling.
-const STEREO_ICON_COLOR = UIAPE_CONFIG.STEREO_ICON_COLOR;
-const STEREO_ICON_COLOR_OFF = UIAPE_CONFIG.STEREO_ICON_COLOR_OFF;
+// Stereo icon colors are read live from config so changes apply without a reload
 // Panel edge style, 0 disabled, 1 to 3, read live inside uiapeBuildLiveCss
 // #################### RDS ICON STYLING (Highpoint2000) #################### //
 
@@ -1976,10 +2015,6 @@ const PTY_INDICATOR_COLOR = UIAPE_CONFIG.PTY_INDICATOR_COLOR;
 const PTY_INDICATOR_COLOR_OFF = UIAPE_CONFIG.PTY_INDICATOR_COLOR_OFF;
 const MS_INDICATOR_COLOR = UIAPE_CONFIG.MS_INDICATOR_COLOR;
 const MS_INDICATOR_COLOR_OFF = UIAPE_CONFIG.MS_INDICATOR_COLOR_OFF;
-const ACTIVE_STEREO_ICON_COLOR = resolveIconColor(STEREO_ICON_COLOR);
-const ACTIVE_RDS_INDICATOR_ICON_COLOR = resolveIconColor(RDS_INDICATOR_ICON_COLOR);
-const ACTIVE_RDS_INDICATOR_ICON_COLOR_OFF = resolveIconColor(RDS_INDICATOR_ICON_COLOR_OFF, "");
-
 function refreshAutoIconColorVars(cfg) {
   const c = cfg || getUiapPanelConfig();
   const root = document.documentElement;
@@ -3072,7 +3107,12 @@ function createUiapConfigLauncher() {
           "PTY_INDICATOR_COLOR",
           "PTY_INDICATOR_COLOR_OFF",
           "MS_INDICATOR_COLOR",
-          "MS_INDICATOR_COLOR_OFF"
+          "MS_INDICATOR_COLOR_OFF",
+          "ECC_INDICATOR_COLOR_OFF",
+          "MULTIPATH_INDICATOR_COLOR",
+          "MULTIPATH_INDICATOR_COLOR_OFF",
+          "BW_INDICATOR_COLOR",
+          "BW_INDICATOR_COLOR_OFF"
         ]);
 
         const UIAPE_PLUGIN_BUTTON_DEFAULTS = [
@@ -3196,13 +3236,18 @@ function createUiapConfigLauncher() {
             ["PTY_INDICATOR_COLOR_OFF", "color", "PTY off color", "default, auto, or custom #RRGGBB."],
             ["MS_INDICATOR_COLOR", "color", "MS color", "default, auto, or custom #RRGGBB."],
             ["MS_INDICATOR_COLOR_OFF", "color", "MS off color", "default, auto, or custom #RRGGBB."],
+            ["ECC_INDICATOR_COLOR_OFF", "color", "ECC off color", "default, auto, or custom #RRGGBB. Only affects the fallback label shown when there's no flag to display."],
             ["RDS_ICON_STYLE_REMOVE_RDS_ICON", "checkbox", "Remove RDS icon", "Useful with multipath/Metrics Monitor setups."],
             ["MULTIPATH_INDICATOR", "checkbox", "Multipath indicator", "Adds multipath icon/text."],
             ["MULTIPATH_ATTACH_TO", "select", "Multipath attach to", "Target icon for multipath indicator.", [["STEREO","STEREO"],["PTY","PTY"],["MS","MS"],["ECC","ECC"],["TP","TP"],["TA","TA"],["RDS","RDS"],["BW","BW"]]],
             ["MULTIPATH_LEFT_PADDING", "number", "Multipath left padding", "Spacing when not attached to Stereo/Mono."],
             ["MULTIPATH_DISPLAY_MODE", "select", "Multipath display mode", "Icon, text, or both.", [["ICON","ICON"],["TEXT","TEXT"],["BOTH","BOTH"]]],
             ["MULTIPATH_TEXT_SIZE", "number", "Multipath text size", "Size in percentage. Font size for the RF/MP text."],
+            ["MULTIPATH_INDICATOR_COLOR", "color", "Multipath color", "default, auto, or custom #RRGGBB."],
+            ["MULTIPATH_INDICATOR_COLOR_OFF", "color", "Multipath off color", "default, auto, or custom #RRGGBB."],
             ["BANDWIDTH_UPDATE_INTERVAL", "number", "Bandwidth update interval", "Milliseconds."],
+            ["BW_INDICATOR_COLOR", "color", "BW color", "default, auto, or custom #RRGGBB."],
+            ["BW_INDICATOR_COLOR_OFF", "color", "BW off color", "default, auto, or custom #RRGGBB."],
             ["LED_GLOW_EFFECT_ICONS_RDS_ICON_STYLE_PTY", "checkbox", "PTY icon glow", "Glow effect for PTY RDS icon style."],
             ["LED_GLOW_EFFECT_ICONS_RDS_ICON_STYLE_MS", "checkbox", "MS icon glow", "Glow effect for MS RDS icon style."],
             ["LED_GLOW_EFFECT_ICONS_BANDWIDTH", "checkbox", "Bandwidth icon glow", "Glow effect for bandwidth."],
@@ -3957,16 +4002,8 @@ document.head.insertBefore(styleElement, uiapeStyleAnchor);
 // +++++++++++++++ STEP 4b (start) +++++++++++++++ //
 // Place a new feature block next to a similar existing one below, not necessarily first
 
-if (STEREO_ICON_COLOR !== "default") {
-    const styleId = "custom-circle-style";
-    let existingStyle = document.getElementById(styleId);
-    if (!existingStyle) {
-      existingStyle = document.createElement("style");
-      existingStyle.id = styleId;
-      document.head.appendChild(existingStyle);
-    }
-    existingStyle.textContent = `.circle.data-st { border: 2px solid var(--uiape-stereo-icon-color) }`;
-
+// Runs even when the color starts as default, so switching to a custom color live works without a reload
+{
     function clamp(num, min, max) {
       return Math.min(Math.max(num, min), max);
     }
@@ -4012,15 +4049,26 @@ if (STEREO_ICON_COLOR !== "default") {
     const backgroundAlpha = alphas[2]; // glow-alpha-3
 
     function applyGlow() {
+      const liveStereoCfg = getUiapPanelConfig();
       const styleId = "custom-circle-style";
       let existingStyle = document.getElementById(styleId);
+
+      const circles = document.querySelectorAll('.wrapper-outer #wrapper .circle-container .circle.data-st');
+
+      if (liveStereoCfg.STEREO_ICON_COLOR === "default") {
+        if (existingStyle) existingStyle.textContent = '';
+        circles.forEach(el => {
+          el.style.backgroundColor = '';
+          el.style.boxShadow = '';
+        });
+        return;
+      }
+
       if (!existingStyle) {
         existingStyle = document.createElement("style");
         existingStyle.id = styleId;
         document.head.appendChild(existingStyle);
       }
-
-      const circles = document.querySelectorAll('.wrapper-outer #wrapper .circle-container .circle.data-st');
 
       circles.forEach(el => {
         if (el.classList.contains('opacity-half') || el.closest('.opacity-half')) {
@@ -4034,7 +4082,11 @@ if (STEREO_ICON_COLOR !== "default") {
 
         existingStyle.textContent = `.circle.data-st { border: 2px solid var(--uiape-stereo-icon-color) }`;
 
-        if (!LED_GLOW_EFFECT_ICONS) return;
+        if (!liveStereoCfg.LED_GLOW_EFFECT_ICONS) {
+          el.style.backgroundColor = '';
+          el.style.boxShadow = '';
+          return;
+        }
 
         const borderColor = getComputedStyle(el).borderColor;
         let baseRgb;
@@ -4073,6 +4125,9 @@ if (STEREO_ICON_COLOR !== "default") {
     }
 
     applyGlow();
+
+    // Lets uiapeAfterConfigChange apply a stereo color change live, strict mode hides this block's functions
+    uiapeApplyStereoGlowFn = applyGlow;
 
     // MutationObserver
     const targetNode = document.querySelector('#flags-container-desktop');
@@ -5442,18 +5497,19 @@ function addRandomIcon(result) {
     if (!result) {
       iconSpan.classList.remove('opacity-full');
       iconSpan.classList.add('opacity-half');
-      iconSpan.style.color = 'var(--color-text)';
     } else {
       if (result === 'half') {
           iconSpan.style.opacity = '0.5';
       } else {
           iconSpan.style.opacity = '1';
       }
-      iconSpan.style.color = 'var(--color-text)';
       iconSpan.classList.remove('opacity-half');
       iconSpan.classList.add('opacity-full');
-      iconSpan.style.color = 'var(--color-text)';
     }
+
+    const multipathActiveColor = resolveIconColor(cfg.MULTIPATH_INDICATOR_COLOR, "");
+    const multipathOffColor = resolveIconColor(cfg.MULTIPATH_INDICATOR_COLOR_OFF, "");
+    iconSpan.style.color = result ? (multipathActiveColor || 'var(--color-text)') : (multipathOffColor || 'var(--color-text)');
 
     const iconElement = document.createElement('div');
     iconElement.className = 'fa-solid fa-mountain-sun';
@@ -6236,7 +6292,9 @@ function handleTextSocketMessage(message) {
   const TA_INDICATOR_ICON_COLOR_OFF = liveRdsCfg.TA_INDICATOR_ICON_COLOR_OFF;
   const BANDWIDTH_UPDATE_INTERVAL = liveRdsCfg.BANDWIDTH_UPDATE_INTERVAL;
   const LED_GLOW_EFFECT_ICONS_BANDWIDTH = liveRdsCfg.LED_GLOW_EFFECT_ICONS_BANDWIDTH;
-  const STEREO_ICON_COLOR = liveRdsCfg.STEREO_ICON_COLOR;
+  const BW_INDICATOR_COLOR = liveRdsCfg.BW_INDICATOR_COLOR;
+  const BW_INDICATOR_COLOR_OFF = liveRdsCfg.BW_INDICATOR_COLOR_OFF;
+  const ECC_INDICATOR_COLOR_OFF = liveRdsCfg.ECC_INDICATOR_COLOR_OFF;
 
   // HF-Level
   if (message.sig !== undefined) {
@@ -6295,11 +6353,13 @@ function handleTextSocketMessage(message) {
       if (ptyText === "PTY") {
         applyTextIndicatorColor(ptyLabel, false, PTY_INDICATOR_COLOR, PTY_INDICATOR_COLOR_OFF, LED_GLOW_EFFECT_ICONS_RDS_ICON_STYLE_PTY);
         ptyLabel.style.fontWeight = "bold";
-        if (REDUCE_HALF_OPACITY) ptyLabel.style.opacity = off_opacity;
+        ptyLabel.dataset.uiapeDesiredFontWeight = ptyLabel.style.fontWeight;
+        ptyLabel.style.opacity = off_opacity;
       } else {
         applyTextIndicatorColor(ptyLabel, true, PTY_INDICATOR_COLOR, PTY_INDICATOR_COLOR_OFF, LED_GLOW_EFFECT_ICONS_RDS_ICON_STYLE_PTY);
         ptyLabel.style.fontWeight = "600";
-        if (REDUCE_HALF_OPACITY) ptyLabel.style.opacity = '1';
+        ptyLabel.dataset.uiapeDesiredFontWeight = ptyLabel.style.fontWeight;
+        ptyLabel.style.opacity = '1';
       }
     }
 
@@ -6317,51 +6377,13 @@ function handleTextSocketMessage(message) {
   // --- ECC ---
   const eccWrapper = document.getElementById('eccWrapper');
   if (eccWrapper) {
-    // Clear previous content each update
-    eccWrapper.innerHTML = "";
-
-    const hasEcc = message.ecc !== undefined && message.ecc !== null && message.ecc !== "";
-    const eccPreset = uiapeGetActiveRdsPreset(liveRdsCfg);
-
-    if (!hasEcc) {
-      const noEcc = document.createElement('span');
-      noEcc.textContent = 'ECC';
-      noEcc.style.color = '#696969';
-      noEcc.style.fontSize = '13px';
-      noEcc.style.fontWeight = 'bold';
-      noEcc.style.border = "1px solid #696969";
-      noEcc.style.borderRadius = "3px";
-      noEcc.style.padding = '0 3px 0 3px';
-      noEcc.style.display = 'inline-flex';
-      noEcc.style.alignItems = 'center';
-      noEcc.style.height = uiapeResolveLiveRdsIconHeight(eccPreset, "ECC", eccPreset.PTY_HEIGHT) + 'px';
-      noEcc.style.paddingBottom = '0.5px'; // Value that aligns for both Firefox and Chrome
-      if (REDUCE_HALF_OPACITY) noEcc.style.opacity = off_opacity;
-      eccWrapper.appendChild(noEcc);
-    } else {
-      const eccSpan = document.querySelector('.data-flag');
-      if (eccSpan && eccSpan.innerHTML.trim() !== "") {
-      const newSpan = eccSpan.cloneNode(true);
-      // Fixed total width keeps later icons from shifting, ECC_FLAG_SPACING only splits it differently
-      const eccFlagLeftInset = Number(eccPreset.ECC_FLAG_SPACING) || 0;
-      newSpan.style.marginLeft = eccFlagLeftInset + 'px';
-      newSpan.style.marginRight = (UIAPE_ECC_FLAG_RESERVED_WIDTH - eccFlagLeftInset) + 'px';
-      newSpan.style.marginTop = "0";
-      newSpan.style.transform = "translateY(0)";
-      newSpan.style.display = "inline-flex";
-      newSpan.style.alignItems = "center";
-      newSpan.style.height = "17px";
-      newSpan.style.lineHeight = "17px";
-      eccWrapper.appendChild(newSpan);
-      } else {
-        // Fallback
-        const noEcc = document.createElement('span');
-        noEcc.textContent = 'ECC';
-        noEcc.style.color = '#696969';
-        noEcc.style.fontSize = '13px';
-        eccWrapper.appendChild(noEcc);
-      }
-    }
+    eccWrapper._uiapeEccState = {
+      hasEcc: message.ecc !== undefined && message.ecc !== null && message.ecc !== "",
+      eccPreset: uiapeGetActiveRdsPreset(liveRdsCfg),
+      noEccColor: resolveIconColor(ECC_INDICATOR_COLOR_OFF, "#696969")
+    };
+    uiapeRebuildEccWrapperContent(eccWrapper);
+    uiapeGuardEccWrapper(eccWrapper);
   }
 
   // --- Stereo ---
@@ -6702,38 +6724,63 @@ function handleTextSocketMessage(message) {
         rdsIcon.style.objectFit = '';
     }
 
-    function getComputedStereoIconHex() {
-        const stereoIcon = document.querySelector('.circle.data-st');
-        if (stereoIcon) {
-            const borderColor = getComputedStyle(stereoIcon).borderColor;
-            const computedHex = normalizeHexColor(borderColor);
-            if (computedHex) return computedHex;
-        }
+    // Reasserts the color if another plugin (e.g. Metrics Monitor) restyles the same icon id
+    function uiapeGuardIndicatorColor(icon) {
+        if (icon._uiapeColorGuard) return;
+        icon._uiapeColorGuard = new MutationObserver(() => {
+            const applyCorrection = () => {
+                const desiredColor = icon.dataset.uiapeDesiredColor;
+                const desiredBorderColor = icon.dataset.uiapeDesiredBorderColor;
+                const desiredFontWeight = icon.dataset.uiapeDesiredFontWeight;
+                let corrected = false;
+                if (desiredColor !== undefined && icon.style.color !== desiredColor) {
+                    icon.style.color = desiredColor;
+                    corrected = true;
+                }
+                if (desiredBorderColor !== undefined && icon.style.borderColor !== desiredBorderColor) {
+                    icon.style.borderColor = desiredBorderColor;
+                    corrected = true;
+                }
+                if (desiredFontWeight !== undefined && icon.style.fontWeight !== desiredFontWeight) {
+                    icon.style.fontWeight = desiredFontWeight;
+                    corrected = true;
+                }
+                if (corrected && !window.__uiapeGuardTripped) {
+                    window.__uiapeGuardTripped = true;
+                    console.log(`[${pluginName}] Metrics Monitor conflict detected, color guard now correcting instantly`);
+                }
+            };
 
-        const cssVarHex = normalizeHexColor(
-            getComputedStyle(document.documentElement).getPropertyValue('--uiape-stereo-icon-color')
-        );
-        if (cssVarHex) return cssVarHex;
-
-        return resolveIconColor(STEREO_ICON_COLOR);
-    }
-
-    function resolveStatusIconColor(color, fallback = "") {
-        return color === "auto"
-            ? getComputedStereoIconHex()
-            : resolveIconColor(color, fallback);
+            if (window.__uiapeGuardTripped) {
+                applyCorrection();
+                return;
+            }
+            if (icon._uiapeGuardTimer) return;
+            icon._uiapeGuardTimer = setTimeout(() => {
+                icon._uiapeGuardTimer = null;
+                applyCorrection();
+            }, 20);
+        });
+        icon._uiapeColorGuard.observe(icon, { attributes: true, attributeFilter: ['style'] });
     }
 
     function applyTextIndicatorColor(icon, isOn, activeColorSetting, offColorSetting, glowEnabled, glowIntensity = RDS_INDICATOR_ICON_GLOW_INTENSITY) {
-        const activeColor = resolveStatusIconColor(activeColorSetting, "");
-        const offColor = resolveStatusIconColor(offColorSetting, "");
-        
+        // Remembers the on/off state so a config change can reapply immediately, without waiting for the next message
+        icon.dataset.uiapeIndicatorOn = isOn ? '1' : '0';
+
+        // Auto means the theme accent, same as every other color setting
+        const activeColor = resolveIconColor(activeColorSetting, "");
+        const offColor = resolveIconColor(offColorSetting, "");
+
         const color = isOn
             ? (activeColor || "#FFFFFF")
             : (offColor || "#696969");
 
         icon.style.color = color;
         icon.style.borderColor = color;
+        icon.dataset.uiapeDesiredColor = icon.style.color;
+        icon.dataset.uiapeDesiredBorderColor = icon.style.borderColor;
+        uiapeGuardIndicatorColor(icon);
 
         if (isOn && glowEnabled && color) {
             icon.style.filter = createGlowEffect(color, glowIntensity);
@@ -6742,12 +6789,112 @@ function handleTextSocketMessage(message) {
         }
     }
 
+    function uiapeRebuildEccWrapperContent(eccWrapper) {
+        const state = eccWrapper._uiapeEccState;
+        if (!state) return;
+        const { hasEcc, eccPreset, noEccColor } = state;
+        const reduceHalfOpacity = getUiapPanelConfig().REDUCE_HALF_OPACITY;
+        const offOpacity = reduceHalfOpacity === true ? '0.6' : '0.9';
+
+        eccWrapper.innerHTML = "";
+
+        if (!hasEcc) {
+            const noEcc = document.createElement('span');
+            noEcc.textContent = 'ECC';
+            noEcc.style.color = noEccColor;
+            noEcc.style.fontSize = '13px';
+            noEcc.style.fontWeight = 'bold';
+            noEcc.style.border = `1px solid ${noEccColor}`;
+            noEcc.style.borderRadius = "3px";
+            noEcc.style.padding = '0 3px 0 3px';
+            noEcc.style.display = 'inline-flex';
+            noEcc.style.alignItems = 'center';
+            noEcc.style.height = uiapeResolveLiveRdsIconHeight(eccPreset, "ECC", eccPreset.PTY_HEIGHT) + 'px';
+            noEcc.style.paddingBottom = '0.5px'; // Value that aligns for both Firefox and Chrome
+            if (reduceHalfOpacity) noEcc.style.opacity = offOpacity;
+            eccWrapper.appendChild(noEcc);
+        } else {
+            const eccSpan = document.querySelector('.data-flag');
+            if (eccSpan && eccSpan.innerHTML.trim() !== "") {
+                const newSpan = eccSpan.cloneNode(true);
+                // Fixed total width keeps later icons from shifting, ECC_FLAG_SPACING only splits it differently
+                const eccFlagLeftInset = Number(eccPreset.ECC_FLAG_SPACING) || 0;
+                newSpan.style.marginLeft = eccFlagLeftInset + 'px';
+                newSpan.style.marginRight = (UIAPE_ECC_FLAG_RESERVED_WIDTH - eccFlagLeftInset) + 'px';
+                newSpan.style.marginTop = "0";
+                newSpan.style.transform = "translateY(0)";
+                newSpan.style.display = "inline-flex";
+                newSpan.style.alignItems = "center";
+                newSpan.style.height = "17px";
+                newSpan.style.lineHeight = "17px";
+                eccWrapper.appendChild(newSpan);
+            } else {
+                // Fallback
+                const noEcc = document.createElement('span');
+                noEcc.textContent = 'ECC';
+                noEcc.style.color = noEccColor;
+                noEcc.style.fontSize = '13px';
+                eccWrapper.appendChild(noEcc);
+            }
+        }
+
+        // Discards the mutation records this just generated, so the guard below ignores its own rebuild
+        if (eccWrapper._uiapeEccGuard) eccWrapper._uiapeEccGuard.takeRecords();
+        eccWrapper._uiapeRebuildGen = (eccWrapper._uiapeRebuildGen || 0) + 1;
+    }
+
+    // Rebuilds if another plugin (e.g. Metrics Monitor) clears/rebuilds #eccWrapper too
+    function uiapeGuardEccWrapper(eccWrapper) {
+        if (eccWrapper._uiapeEccGuard) return;
+        eccWrapper._uiapeEccGuard = new MutationObserver(() => {
+            const rebuild = () => {
+                if (!window.__uiapeGuardTripped) {
+                    window.__uiapeGuardTripped = true;
+                    console.log(`[${pluginName}] Metrics Monitor conflict detected, color guard now correcting instantly`);
+                }
+                uiapeRebuildEccWrapperContent(eccWrapper);
+            };
+
+            if (window.__uiapeGuardTripped) {
+                rebuild();
+                return;
+            }
+            if (eccWrapper._uiapeGuardTimer) return;
+            const genAtDetection = eccWrapper._uiapeRebuildGen;
+            eccWrapper._uiapeGuardTimer = setTimeout(() => {
+                eccWrapper._uiapeGuardTimer = null;
+                if (eccWrapper._uiapeRebuildGen !== genAtDetection) return;
+                rebuild();
+            }, 20);
+        });
+        eccWrapper._uiapeEccGuard.observe(eccWrapper, { childList: true });
+    }
+
+    // Lets uiapeAfterConfigChange reapply a color setting immediately using each icon's last known state
+    function uiapeReapplyIndicatorColors() {
+        const liveCfg = getUiapPanelConfig();
+        const targets = [
+            ['ptyIconOverlay', liveCfg.MS_INDICATOR_COLOR, liveCfg.MS_INDICATOR_COLOR_OFF, liveCfg.LED_GLOW_EFFECT_ICONS_RDS_ICON_STYLE_MS],
+            ['ptyLabel', liveCfg.PTY_INDICATOR_COLOR, liveCfg.PTY_INDICATOR_COLOR_OFF, liveCfg.LED_GLOW_EFFECT_ICONS_RDS_ICON_STYLE_PTY],
+            ['tpIcon', liveCfg.TP_INDICATOR_ICON_COLOR, liveCfg.TP_INDICATOR_ICON_COLOR_OFF, liveCfg.LED_GLOW_EFFECT_ICONS],
+            ['taIcon', liveCfg.TA_INDICATOR_ICON_COLOR, liveCfg.TA_INDICATOR_ICON_COLOR_OFF, liveCfg.LED_GLOW_EFFECT_ICONS],
+            ['bwLabel', liveCfg.BW_INDICATOR_COLOR, liveCfg.BW_INDICATOR_COLOR_OFF, liveCfg.LED_GLOW_EFFECT_ICONS_BANDWIDTH]
+        ];
+        targets.forEach(([id, activeColor, offColor, glow]) => {
+            const icon = document.getElementById(id);
+            if (!icon || icon.dataset.uiapeIndicatorOn === undefined) return;
+            applyTextIndicatorColor(icon, icon.dataset.uiapeIndicatorOn === '1', activeColor, offColor, glow);
+        });
+    }
+
+    uiapeReapplyIndicatorColorsFn = uiapeReapplyIndicatorColors;
+
     function applyRdsIndicatorColor(rdsIcon, isOn) {
-        const activeColor = resolveStatusIconColor(RDS_INDICATOR_ICON_COLOR, "");
-        
+        const activeColor = resolveIconColor(RDS_INDICATOR_ICON_COLOR, "");
+
         const offColor = RDS_INDICATOR_ICON_COLOR_OFF === ""
             ? "#696969"
-            : resolveStatusIconColor(RDS_INDICATOR_ICON_COLOR_OFF, "");
+            : resolveIconColor(RDS_INDICATOR_ICON_COLOR_OFF, "");
 
         clearRdsIndicatorInlinePaint(rdsIcon);
 
@@ -6778,12 +6925,12 @@ function handleTextSocketMessage(message) {
   if (rdsIcon) {
     if (message.rds === true) {
       rdsIcon.src = uiapeGetRdsIconWebp(true);
-      if (REDUCE_HALF_OPACITY) rdsIcon.style.opacity = '0.9';
+      rdsIcon.style.opacity = '0.9';
       if (LED_GLOW_EFFECT_ICONS) rdsIcon.classList.add('icon-glow-on');
       applyRdsIndicatorColor(rdsIcon, true);
     } else {
       rdsIcon.src = uiapeGetRdsIconWebp(false);
-      if (REDUCE_HALF_OPACITY) rdsIcon.style.opacity = off_opacity;
+      rdsIcon.style.opacity = off_opacity;
       rdsIcon.classList.remove('icon-glow-on');
       applyRdsIndicatorColor(rdsIcon, false);
     }
@@ -6859,22 +7006,14 @@ function handleTextSocketMessage(message) {
 
     bwLabel.textContent = sigValue;
 
-    if (sigValue > 64) {
-        bwLabel.style.color = "#fff";
-        bwLabel.style.borderColor = "#fff";
+    const bwOn = sigValue > 64;
+    applyTextIndicatorColor(bwLabel, bwOn, BW_INDICATOR_COLOR, BW_INDICATOR_COLOR_OFF, LED_GLOW_EFFECT_ICONS_BANDWIDTH);
+    if (bwOn) {
         bwLabel.style.fontWeight = "600";
-        if (REDUCE_HALF_OPACITY) bwLabel.style.opacity = '0.9';
-        if (LED_GLOW_EFFECT_ICONS_BANDWIDTH) {
-            bwLabel.style.filter = `drop-shadow(0 0 3px rgba(255, 255, 255, 0.5))
-                                     drop-shadow(0 0 6px rgba(255, 255, 255, 0.4))
-                                     drop-shadow(0 0 9px rgba(238, 238, 238, 0.3))`;
-        }
+        bwLabel.style.opacity = '0.9';
     } else {
-        bwLabel.style.color = "#696969";
-        bwLabel.style.borderColor = "#696969";
         bwLabel.style.fontWeight = "bold";
-        if (REDUCE_HALF_OPACITY) bwLabel.style.opacity = off_opacity;
-        if (LED_GLOW_EFFECT_ICONS_BANDWIDTH) bwLabel.style.filter = 'none';
+        bwLabel.style.opacity = off_opacity;
     }
 
     bwLabel.textContent += ' kHz';
@@ -6985,12 +7124,13 @@ function createIconElement(iconType, preset) {
         eccClone.style.marginRight = (UIAPE_ECC_FLAG_RESERVED_WIDTH - eccFlagLeftInset) + 'px';
         eccWrapper.appendChild(eccClone);
       } else {
+        const noEccColor = resolveIconColor(getUiapPanelConfig().ECC_INDICATOR_COLOR_OFF, "#696969");
         const noEcc = document.createElement('span');
         noEcc.textContent = 'ECC';
-        noEcc.style.color = '#696969';
+        noEcc.style.color = noEccColor;
         noEcc.style.fontSize = '13px';
         noEcc.style.fontWeight = 'bold';
-        noEcc.style.border = "1px solid #696969";
+        noEcc.style.border = `1px solid ${noEccColor}`;
         noEcc.style.borderRadius = "3px";
         noEcc.style.padding = '0 3px 0 3px';
         noEcc.style.display = 'inline-flex';
@@ -7125,6 +7265,9 @@ function createIconRow(iconList, isFirstRow, preset) {
 
 // Re-resolves the preset live and rebuilds from scratch, safe to call again on preset changes
 function insertSignalPanel() {
+  // Metrics Monitor builds its own #signalPanel; defer to it instead of racing to build ours first
+  if (getUiapPanelConfig().METRICS_MONITOR_PLUGIN_IS_INSTALLED) return;
+
   // #signalPanel that exists but belongs to another plugin is to remain untouched.
   let signalPanelElement = document.getElementById('signalPanel');
   if (signalPanelElement && signalPanelElement.dataset.uiapeOwned !== 'true') {
@@ -7232,9 +7375,26 @@ uiapeTeardownRdsIconStylePanelFn = uiapeTeardownRdsIconStylePanel;
 //  Init
 // --------------------------------------------------------------
 //
+// Metrics Monitor's own initHeader() creates #eccWrapper then calls its setupTextSocket().
+// Guard remains the actual safety net either way.
+function uiapeWaitForMetricsMonitorThenSetup() {
+  let attempts = 0;
+  const poll = setInterval(() => {
+    attempts++;
+    if (document.getElementById('eccWrapper') || attempts >= 300) {
+      clearInterval(poll);
+      setTimeout(setupTextSocket, 100);
+    }
+  }, 50);
+}
+
 function initMetricsMonitor() {
   if (getUiapPanelConfig().RDS_ICON_STYLE) insertSignalPanel();
-  setupTextSocket();
+  if (getUiapPanelConfig().METRICS_MONITOR_PLUGIN_IS_INSTALLED) {
+    uiapeWaitForMetricsMonitorThenSetup();
+  } else {
+    setupTextSocket();
+  }
 }
 
 // Must run unconditionally, a readyState check here would skip setupTextSocket since this async file resumes after DOM ready
