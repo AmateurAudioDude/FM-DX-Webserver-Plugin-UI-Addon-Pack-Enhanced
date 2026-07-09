@@ -1,5 +1,5 @@
 /*
-    UI Add-on Pack Enhanced v1.0.4 by AAD
+    UI Add-on Pack Enhanced v1.0.5 by AAD
     -------------------------------------
     https://github.com/AmateurAudioDude/FM-DX-Webserver-Plugin-UI-Addon-Pack-Enhanced
 

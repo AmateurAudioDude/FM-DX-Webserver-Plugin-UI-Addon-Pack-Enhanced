@@ -15,6 +15,10 @@ A collection of visual enhancements for FM-DX Webserver. Features may be added/r
 
 ###### Includes code and assistance from Highpoint2000 & MCelliotG.
 
+v1.0.5
+------
+* Minor fixes for mobile
+
 v1.0.4
 ------
 * Added custom color options for Multipath, Bandwidth, and the ECC "off" label

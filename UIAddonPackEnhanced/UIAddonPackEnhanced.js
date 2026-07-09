@@ -1,5 +1,5 @@
 /*
-    UI Add-on Pack Enhanced v1.0.4 by AAD
+    UI Add-on Pack Enhanced v1.0.5 by AAD
     -------------------------------------
     https://github.com/AmateurAudioDude/FM-DX-Webserver-Plugin-UI-Addon-Pack-Enhanced
 */
@@ -2157,6 +2157,10 @@ function uiapeCanShowConfigPanel() {
 }
 
 function createUiapConfigLauncher() {
+    // More reliable than the (hover: none) media feature on some older Android browsers
+    if (('ontouchstart' in window) || navigator.maxTouchPoints > 0) {
+      document.documentElement.classList.add('uiape-touch-device');
+    }
     if (!uiapeCanShowConfigPanel()) {
       document.getElementById("uiape-config-gear")?.remove();
       document.getElementById("uiape-config-panel")?.remove();
@@ -2214,11 +2218,9 @@ function createUiapConfigLauncher() {
 
       /* :hover never triggers on touch devices, so hover-to-reveal would leave the gear
          undiscoverable and unclickable there. */
-      @media (hover: none) {
-        .uiape-config-host > #uiape-config-gear {
-          opacity: 1 !important;
-          pointer-events: auto !important;
-        }
+      html.uiape-touch-device .uiape-config-host > #uiape-config-gear {
+        opacity: 0.7 !important;
+        pointer-events: auto !important;
       }
 
       #uiape-config-gear:hover {
@@ -2506,6 +2508,29 @@ function createUiapConfigLauncher() {
         accent-color: var(--color-main-bright, var(--color-4));
       }
 
+      .uiape-number-sign-toggle {
+        flex: 0 0 auto;
+        width: 22px;
+        height: 22px;
+        margin-right: 4px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid color-mix(in srgb, var(--color-4, #888) 32%, transparent);
+        border-radius: 6px;
+        background: color-mix(in srgb, var(--color-2, #222) 74%, black);
+        color: color-mix(in srgb, var(--color-4, #888) 80%, transparent);
+        cursor: pointer;
+        font-size: 12px;
+        line-height: 1;
+        padding: 0;
+      }
+
+      .uiape-number-sign-toggle:hover {
+        border-color: var(--color-4, #888);
+        color: var(--color-4, #888);
+      }
+
       .uiape-reset-default {
         flex: 0 0 auto;
         width: 20px;
@@ -2537,8 +2562,7 @@ function createUiapConfigLauncher() {
       }
 
       .uiape-reset-default-icon {
-        display: inline-block;
-        transform: translate(var(--uiape-reset-icon-x, 0px), var(--uiape-reset-icon-y, 0px));
+        display: block;
       }
 
       .uiape-reset-default:hover {
@@ -2812,11 +2836,6 @@ function createUiapConfigLauncher() {
           top: auto;
           width: min(360px, calc(100vw - 20px));
           max-height: calc(100vh - 64px);
-        }
-
-        .uiape-reset-default-icon {
-          --uiape-reset-icon-x: 0px;
-          --uiape-reset-icon-y: -2px;
         }
       }
     `;
@@ -3316,7 +3335,10 @@ function createUiapConfigLauncher() {
 
         function uiapeRenderResetButton(action, key, isNonDefault) {
           if (!isNonDefault) return "";
-          return `<button type="button" class="uiape-reset-default" data-uiape-action="${action}" data-uiape-reset-key="${key}" title="Reset to default" aria-label="Reset to default"><span class="uiape-reset-default-icon">\u21BA</span></button>`;
+          // Inline SVG. Circle's dash starts at 3 o'clock and draws clockwise, so a 270/90
+          // dasharray split ends the dash at 12 o'clock, where the tangent is exactly horizontal.
+          const icon = `<svg class="uiape-reset-default-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8" stroke-dasharray="37.7 12.57"/><path d="M9 1 L12 4 L9 7"/></svg>`;
+          return `<button type="button" class="uiape-reset-default" data-uiape-action="${action}" data-uiape-reset-key="${key}" title="Reset to default" aria-label="Reset to default">${icon}</button>`;
         }
 
         // Updates just this row's reset button in place, a full re-render would drop focus while typing
@@ -3388,7 +3410,16 @@ function createUiapConfigLauncher() {
             controlHtml = `<textarea data-uiape-key="${key}">${uiapeEscapeHtml(value ?? "")}</textarea>`;
           } else {
             const stepAttr = type === "number" && UIAPE_NUMBER_WHEEL_STEP_OVERRIDES[key] ? ` step="${UIAPE_NUMBER_WHEEL_STEP_OVERRIDES[key]}"` : "";
-            controlHtml = `<input type="${type}" data-uiape-key="${key}" value="${uiapeEscapeHtml(value ?? "")}"${stepAttr}>`;
+            // type="text" + inputmode/pattern instead of type="number", since Android's numeric
+            // keypad for type="number" omits the minus key even when negative values are allowed
+            const inputType = type === "number" ? "text" : type;
+            const numberAttrs = type === "number" ? ` inputmode="decimal" pattern="-?[0-9]*\\.?[0-9]*" data-uiape-type="number"` : "";
+            controlHtml = `<input type="${inputType}" data-uiape-key="${key}" value="${uiapeEscapeHtml(value ?? "")}"${stepAttr}${numberAttrs}>`;
+            // No mobile keyboard reliably offers a minus key even with the attributes above, so
+            // this toggles the sign directly, sidestepping the keyboard layout entirely
+            if (type === "number") {
+              controlHtml = `<button type="button" class="uiape-number-sign-toggle" data-uiape-action="toggle-sign" title="Toggle negative" aria-label="Toggle negative">&#177;</button>` + controlHtml;
+            }
           }
 
           // Lets an admin restrict this setting to admins, right from the row itself
@@ -3445,9 +3476,11 @@ function createUiapConfigLauncher() {
             const resetButtonHtml = uiapeRenderResetButton("reset-preset-field", key, !uiapeValuesEqual(rawValue, uiapeBaselinePresetValue(key)));
             const adminDiffDotHtml = uiapeRenderAdminDiffDot(!uiapeValuesEqual(rawValue, uiapeAdminPresetValue(key)));
             const presetStepAttr = type === "number" && UIAPE_NUMBER_WHEEL_STEP_OVERRIDES[key] ? ` step="${UIAPE_NUMBER_WHEEL_STEP_OVERRIDES[key]}"` : "";
+            const presetInputType = type === "number" ? "text" : type;
+            const presetNumberAttrs = type === "number" ? ` inputmode="decimal" pattern="-?[0-9]*\\.?[0-9]*" data-uiape-type="number"` : "";
             const inputHtml = type === "select"
               ? `<select data-uiape-preset-field="${key}">${(field[4] || []).map(opt => `<option value="${uiapeEscapeHtml(opt[0])}" ${String(value) === String(opt[0]) ? "selected" : ""}>${uiapeEscapeHtml(opt[1])}</option>`).join("")}</select>`
-              : `<input type="${type}" data-uiape-preset-field="${key}" value="${uiapeEscapeHtml(value ?? "")}"${presetStepAttr}>`;
+              : (type === "number" ? `<button type="button" class="uiape-number-sign-toggle" data-uiape-action="toggle-sign" title="Toggle negative" aria-label="Toggle negative">&#177;</button>` : "") + `<input type="${presetInputType}" data-uiape-preset-field="${key}" value="${uiapeEscapeHtml(value ?? "")}"${presetStepAttr}${presetNumberAttrs}>`;
             const isAdminOnlyRow = adminOnlyKeys.includes(key);
             const adminOnlyToggleHtml = isAdmin ? `
               <label class="uiape-admin-only-toggle" title="Hide this setting from non-admin users">
@@ -3752,7 +3785,7 @@ function createUiapConfigLauncher() {
           let value;
           if (field.type === "checkbox") {
             value = field.checked;
-          } else if (field.type === "number") {
+          } else if (field.type === "number" || field.dataset.uiapeType === "number") {
             value = Number(field.value);
             if (!Number.isFinite(value)) value = UIAPE_DEFAULT_CONFIG[key];
           } else if (field.tagName === "SELECT") {
@@ -3781,7 +3814,7 @@ function createUiapConfigLauncher() {
         // Prevent scroll
         panel.addEventListener("wheel", (event) => {
           const field = event.target;
-          if (!field || field.tagName !== "INPUT" || field.type !== "number") return;
+          if (!field || field.tagName !== "INPUT" || (field.type !== "number" && field.dataset.uiapeType !== "number")) return;
           if (document.activeElement !== field) return;
           event.preventDefault();
           const key = field.dataset.uiapeKey || field.dataset.uiapePresetField;
@@ -3814,6 +3847,15 @@ function createUiapConfigLauncher() {
             if (key) {
               uiapeUpdateUserPresetField(key, uiapeArrayText(uiapeBaselinePresetValue(key)));
               uiapeRenderAllControls();
+            }
+            return;
+          }
+
+          if (action === "toggle-sign") {
+            const input = actionTarget.nextElementSibling;
+            if (input) {
+              input.value = String(-(Number(input.value) || 0));
+              input.dispatchEvent(new Event("change", { bubbles: true }));
             }
             return;
           }
@@ -7567,13 +7609,12 @@ function checkUpdate(setupOnly, pluginName, urlUpdateLink, urlFetchLink) {
       pointer-events: auto !important;
     }
     /* Matches this block's own pointer-events:none baseline above in specificity, so it
-       actually wins on touch devices where :hover can never apply. */
-    @media (hover: none) {
-      #signalPanel.uiape-config-host > #uiape-config-gear,
-      #flags-container-desktop.uiape-config-host > #uiape-config-gear {
-        opacity: 1 !important;
-        pointer-events: auto !important;
-      }
+       actually wins on touch devices where :hover can never apply. Uses a JS-detected class
+       rather than (hover: none), which doesn't reliably match on some older Android browsers. */
+    html.uiape-touch-device #signalPanel.uiape-config-host > #uiape-config-gear,
+    html.uiape-touch-device #flags-container-desktop.uiape-config-host > #uiape-config-gear {
+      opacity: 0.7 !important;
+      pointer-events: auto !important;
     }
     #uiape-config-panel {
       z-index: 900 !important;
