@@ -2509,11 +2509,11 @@ function createUiapConfigLauncher() {
       }
 
       .uiape-number-sign-toggle {
+        display: none;
         flex: 0 0 auto;
         width: 22px;
         height: 22px;
         margin-right: 4px;
-        display: inline-flex;
         align-items: center;
         justify-content: center;
         border: 1px solid color-mix(in srgb, var(--color-4, #888) 32%, transparent);
@@ -2524,6 +2524,10 @@ function createUiapConfigLauncher() {
         font-size: 12px;
         line-height: 1;
         padding: 0;
+      }
+
+      html.uiape-touch-device .uiape-number-sign-toggle {
+        display: inline-flex;
       }
 
       .uiape-number-sign-toggle:hover {
