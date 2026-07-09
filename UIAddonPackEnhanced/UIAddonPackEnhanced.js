@@ -3214,7 +3214,6 @@ function createUiapConfigLauncher() {
 
             ["IS_TEF_RADIO", "checkbox", "TEF radio mode", "Uses TEF radio MP assumption."],
             ["METRICS_MONITOR_PLUGIN_IS_INSTALLED", "checkbox", "Metrics Monitor installed", "Enable if Metrics Monitor plugin is installed."],
-            ["ECC_FLAG_SPACING_METRICS_MONITOR", "number", "ECC flag spacing (Metrics Monitor)", "Extra left offset that aligns the ECC flag with the ECC text icon, only used when Metrics Monitor installed is enabled."],
             ["IS_VISUALEQ_PLUGIN_ENABLED", "checkbox", "VisualEQ enabled", "Enable if VisualEQ plugin is installed."],
 
             ["RDS_ICON_PRESET", "select", "RDS icon preset", "0 user, 1 preset 1, 2 preset 2, 3 preset 3.", [["0","User defined"],["1","Preset 1"],["2","Preset 2"],["3","Preset 3"]]],
@@ -3255,7 +3254,8 @@ function createUiapConfigLauncher() {
             ["LED_GLOW_EFFECT_ICONS_RDS_ICON_STYLE_MS", "checkbox", "MS icon glow", "Glow effect for MS RDS icon style."],
             ["LED_GLOW_EFFECT_ICONS_BANDWIDTH", "checkbox", "Bandwidth icon glow", "Glow effect for bandwidth."],
             ["LED_GLOW_EFFECT_ICONS_METRICS_MONITOR_PLUGIN", "checkbox", "Metrics icon glow", "Glow for Metrics Monitor icons."],
-            ["REPLACE_MPX_LOGO_WITH_STEREO_LOGO_METRICS_MONITOR_PLUGIN", "checkbox", "Replace MPX with stereo", "Metrics Monitor compatibility option."]
+            ["REPLACE_MPX_LOGO_WITH_STEREO_LOGO_METRICS_MONITOR_PLUGIN", "checkbox", "Replace MPX with stereo", "Metrics Monitor compatibility option."],
+            ["ECC_FLAG_SPACING_METRICS_MONITOR", "number", "ECC flag spacing (Metrics Monitor)", "Extra left offset that aligns the ECC flag with the ECC text icon, only used when Metrics Monitor installed is enabled."]
           ],
           plugins: [
             ["SORT_PLUGIN_BUTTONS", "checkbox", "Sort plugin buttons", "Enables custom plugin button order."],
