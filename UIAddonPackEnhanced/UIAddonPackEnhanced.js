@@ -13,7 +13,7 @@ const UIAPE_SEARCH_INCLUDE_DESCRIPTIONS = false;
 // Signal offset in dB
 const SIGNAL_OFFSET = 0.00;
 
-const pluginVersion = '1.0.4';
+const pluginVersion = '1.0.5';
 const pluginName = "UI Add-on Pack Enhanced";
 const pluginHomepageUrl = "https://github.com/AmateurAudioDude/FM-DX-Webserver-Plugin-UI-Addon-Pack-Enhanced";
 const pluginUpdateUrl = "https://raw.githubusercontent.com/AmateurAudioDude/FM-DX-Webserver-Plugin-UI-Addon-Pack-Enhanced/refs/heads/main/UIAddonPackEnhanced/UIAddonPackEnhanced.js";
