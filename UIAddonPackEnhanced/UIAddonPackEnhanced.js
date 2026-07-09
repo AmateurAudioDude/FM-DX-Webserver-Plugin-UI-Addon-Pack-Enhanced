@@ -5697,6 +5697,7 @@ uiapeOnDomReady(() => {
       const elementSearchUp = document.getElementById('search-up');
       const elementFreqDown = document.getElementById('freq-down');
       const elementFreqUp = document.getElementById('freq-up');
+      const elementCommandInput = document.getElementById('commandinput');
 
       // Disable scanner/search buttons
       if (elementScannerDown && elementScannerUp) {
@@ -5710,6 +5711,13 @@ uiapeOnDomReady(() => {
       // Disable freq buttons
       if (elementFreqDown) elementFreqDown.disabled = true;
       if (elementFreqUp) elementFreqUp.disabled = true;
+
+      // Disabling (not just pointer-events:none) is what actually blocks Tab focus and
+      // focus() calls from other elements, not just direct clicks
+      if (elementCommandInput) {
+        elementCommandInput.blur();
+        elementCommandInput.disabled = true;
+      }
 
       // Disable click on containers
       const containers = [
@@ -5746,6 +5754,7 @@ uiapeOnDomReady(() => {
         const elementSearchUp = document.getElementById('search-up');
         const elementFreqDown = document.getElementById('freq-down');
         const elementFreqUp = document.getElementById('freq-up');
+        const elementCommandInput = document.getElementById('commandinput');
 
         // Re-enable scanner/search buttons
         if (elementScannerDown && elementScannerUp) {
@@ -5759,6 +5768,7 @@ uiapeOnDomReady(() => {
         // Re-enable freq buttons
         if (elementFreqDown) elementFreqDown.disabled = false;
         if (elementFreqUp) elementFreqUp.disabled = false;
+        if (elementCommandInput) elementCommandInput.disabled = false;
 
         // Re-enable click on containers
         const containers = [
@@ -5829,6 +5839,11 @@ uiapeOnDomReady(() => {
                 lockIconStatus();
                 userCountdownTimer();
                 document.getElementById("tune-buttons").style.pointerEvents = "none";
+                const elementCommandInput = document.getElementById('commandinput');
+                if (elementCommandInput) {
+                  elementCommandInput.blur();
+                  elementCommandInput.disabled = true;
+                }
                 document.querySelectorAll(".dashboard-panel-plugin-list").forEach(el => {
                     el.style.pointerEvents = "none";
                 });
