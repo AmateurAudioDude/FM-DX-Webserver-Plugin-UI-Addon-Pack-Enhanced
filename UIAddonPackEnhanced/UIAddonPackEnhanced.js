@@ -409,6 +409,7 @@ const UIAPE_DEFAULT_CONFIG = {
   RDS_ICON_STYLE: false,
   RDS_ICON_STYLE_MOBILE: false,
   METRICS_MONITOR_PLUGIN_IS_INSTALLED: false,
+  ECC_FLAG_SPACING_METRICS_MONITOR: 9,
   IS_VISUALEQ_PLUGIN_ENABLED: false,
 
   RDS_ICON_PRESET: 1,
@@ -575,6 +576,7 @@ const UIAPE_DEFAULT_CONFIG = {
     "DEFAULT_SIGNAL_UNIT",
     "IS_TEF_RADIO",
     "METRICS_MONITOR_PLUGIN_IS_INSTALLED",
+    "ECC_FLAG_SPACING_METRICS_MONITOR",
     "IS_VISUALEQ_PLUGIN_ENABLED",
     "RDS_ICON_STYLE_REMOVE_RDS_ICON",
     "BANDWIDTH_UPDATE_INTERVAL",
@@ -3212,6 +3214,7 @@ function createUiapConfigLauncher() {
 
             ["IS_TEF_RADIO", "checkbox", "TEF radio mode", "Uses TEF radio MP assumption."],
             ["METRICS_MONITOR_PLUGIN_IS_INSTALLED", "checkbox", "Metrics Monitor installed", "Enable if Metrics Monitor plugin is installed."],
+            ["ECC_FLAG_SPACING_METRICS_MONITOR", "number", "ECC flag spacing (Metrics Monitor)", "Extra left offset that aligns the ECC flag with the ECC text icon, only used when Metrics Monitor installed is enabled."],
             ["IS_VISUALEQ_PLUGIN_ENABLED", "checkbox", "VisualEQ enabled", "Enable if VisualEQ plugin is installed."],
 
             ["RDS_ICON_PRESET", "select", "RDS icon preset", "0 user, 1 preset 1, 2 preset 2, 3 preset 3.", [["0","User defined"],["1","Preset 1"],["2","Preset 2"],["3","Preset 3"]]],
@@ -6053,6 +6056,7 @@ ${getUiapPanelConfig().RDS_ICON_STYLE ? `
   align-items: center;
   white-space: nowrap;
   opacity: 0.9;
+  box-sizing: border-box;
 }
 `;
 // Before the live style element so live-toggle rules can still override these static ones.
@@ -6793,8 +6797,16 @@ function handleTextSocketMessage(message) {
         const state = eccWrapper._uiapeEccState;
         if (!state) return;
         const { hasEcc, eccPreset, noEccColor } = state;
-        const reduceHalfOpacity = getUiapPanelConfig().REDUCE_HALF_OPACITY;
+        const liveCfg = getUiapPanelConfig();
+        const reduceHalfOpacity = liveCfg.REDUCE_HALF_OPACITY;
         const offOpacity = reduceHalfOpacity === true ? '0.6' : '0.9';
+        const mmInstalled = liveCfg.METRICS_MONITOR_PLUGIN_IS_INSTALLED;
+
+        // Also applied here so it still works when Metrics Monitor owns eccWrapper
+        eccWrapper.style.marginRight = eccPreset.ECC_ICON_SPACING + 'px';
+        // Fixed width stops later icons shifting when Metrics Monitor's own placeholder/flag differ in size
+        eccWrapper.style.minWidth = mmInstalled ? '32px' : '';
+        eccWrapper.style.justifyContent = mmInstalled ? 'center' : '';
 
         eccWrapper.innerHTML = "";
 
@@ -6814,11 +6826,11 @@ function handleTextSocketMessage(message) {
             if (reduceHalfOpacity) noEcc.style.opacity = offOpacity;
             eccWrapper.appendChild(noEcc);
         } else {
-            const eccSpan = document.querySelector('.data-flag');
+            const eccSpan = document.querySelector('.data-flag:not(#eccWrapper *)');
             if (eccSpan && eccSpan.innerHTML.trim() !== "") {
                 const newSpan = eccSpan.cloneNode(true);
-                // Fixed total width keeps later icons from shifting, ECC_FLAG_SPACING only splits it differently
-                const eccFlagLeftInset = Number(eccPreset.ECC_FLAG_SPACING) || 0;
+                // #eccWrapper only centers when Metrics Monitor owns the row, so the nudge only applies there too
+                const eccFlagLeftInset = (Number(eccPreset.ECC_FLAG_SPACING) || 0) + (mmInstalled ? Number(liveCfg.ECC_FLAG_SPACING_METRICS_MONITOR) || 0 : 0);
                 newSpan.style.marginLeft = eccFlagLeftInset + 'px';
                 newSpan.style.marginRight = (UIAPE_ECC_FLAG_RESERVED_WIDTH - eccFlagLeftInset) + 'px';
                 newSpan.style.marginTop = "0";
@@ -7115,10 +7127,10 @@ function createIconElement(iconType, preset) {
       eccWrapper.style.alignItems = 'center';
       eccWrapper.style.whiteSpace = 'nowrap';
       eccWrapper.style.marginRight = preset.ECC_ICON_SPACING + 'px';
-      const eccSpan = document.querySelector('.data-flag');
+      const eccSpan = document.querySelector('.data-flag:not(#eccWrapper *)');
       if (eccSpan && eccSpan.innerHTML.trim() !== "") {
         const eccClone = eccSpan.cloneNode(true);
-        // Fixed total width keeps later icons from shifting, ECC_FLAG_SPACING only splits it differently
+        // This path only runs when Metrics Monitor isn't installed, so no centering nudge needed here
         const eccFlagLeftInset = Number(preset.ECC_FLAG_SPACING) || 0;
         eccClone.style.marginLeft = eccFlagLeftInset + 'px';
         eccClone.style.marginRight = (UIAPE_ECC_FLAG_RESERVED_WIDTH - eccFlagLeftInset) + 'px';
