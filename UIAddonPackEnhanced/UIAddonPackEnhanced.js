@@ -5571,7 +5571,7 @@ function addRandomIcon(result) {
     const showMultipathIcon = displayMode !== "TEXT";
     const showMultipathText = displayMode !== "ICON";
 
-    const signalText = (Number.isFinite(uiapeMultipathSig) && uiapeMultipathSigDisplay !== "") ? Number(uiapeMultipathSig.toFixed(2)) + SIGNAL_OFFSET : "-";
+    const signalText = (Number.isFinite(uiapeMultipathSig) && uiapeMultipathSigDisplay !== "") ? (uiapeMultipathSig + SIGNAL_OFFSET).toFixed(2) : "-";
     const multipathText = uiapeMultipathTooltipSigRaw || "-";
     const tooltipText = `Multipath/Co-channel indicator. <br><strong>Signal: ${signalText} dBf, Multipath: ${multipathText}`;
 
