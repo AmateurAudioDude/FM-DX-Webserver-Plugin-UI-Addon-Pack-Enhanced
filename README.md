@@ -5,7 +5,7 @@ A collection of visual enhancements for FM-DX Webserver. Features may be added/r
 > [!TIP]
 > When logged in as Admin, you can lock any setting as Admin-only, and saving settings will save them globally, for all visitors. Users changing settings will be saved for their browser only.
 >
-> To include setting descriptions in search results, set `UIAPE_SEARCH_INCLUDE_DESCRIPTIONS` to true (located in `UIAddonPackEnhanced.js`).
+> To include setting descriptions in search results, set `UIAPE_SEARCH_INCLUDE_DESCRIPTIONS` to `true` (located in `UIAddonPackEnhanced.js`).
 
 * [Download the latest zip file](https://github.com/AmateurAudioDude/FM-DX-Webserver-Plugin-UI-Addon-Pack-Enhanced/archive/refs/heads/main.zip)
 * Transfer `UIAddonPackEnhanced` folder, and `-UIAddonPackEnhanced.js` to FM-DX-Webserver `plugins` folder
