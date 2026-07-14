@@ -1188,6 +1188,28 @@ function uiapeBuildLiveCss(cfg) {
       transition: all 0.3s ease;
     }
 
+    /* Gradient (background-image) needs a gray fade overlay */
+    .playbutton {
+      position: relative;
+    }
+    .playbutton::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      background: #999;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      pointer-events: none;
+    }
+    .playbutton.bg-gray::after {
+      opacity: 1;
+    }
+    .playbutton i {
+      position: relative;
+      z-index: 1;
+    }
+
     .playbutton:hover, .data-eq:hover, #data-ant input:hover, #data-bw input:hover, .data-ims:hover,
     #freq-down:hover, #search-down:hover, #scanner-down:hover,
     #freq-up:hover, #search-up:hover, #scanner-up:hover,
