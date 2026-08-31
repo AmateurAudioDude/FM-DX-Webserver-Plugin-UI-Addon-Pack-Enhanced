@@ -8616,7 +8616,7 @@ function uiapeApplyRdsIconAutoFit(iconsBar) {
   }
 
   const measure = () => {
-    if (!iconsBar.isConnected) return;
+    if (!iconsBar.isConnected || document.hidden) return;
     const rows = iconsBar.querySelectorAll('[data-uiape-icon-row="1"]');
     const autoFit = !!getUiapPanelConfig().RDS_ICON_SCALE_AUTO_FIT;
     if (!autoFit && rows.length) {
@@ -8698,14 +8698,14 @@ function uiapeApplyRdsIconAutoFit(iconsBar) {
   requestAnimationFrame(measure);
 
   if (!iconsBar._uiapeAutoFitResize && typeof ResizeObserver !== "undefined") {
-    iconsBar._uiapeAutoFitResize = new ResizeObserver(() => requestAnimationFrame(measure));
+    iconsBar._uiapeAutoFitResize = new ResizeObserver(() => { if (!document.hidden) requestAnimationFrame(measure); });
     iconsBar._uiapeAutoFitResize.observe(iconsBar);
     if (iconsBar.parentElement) iconsBar._uiapeAutoFitResize.observe(iconsBar.parentElement);
   }
 
   // Icons appear and disappear without the row's own box changing, so ResizeObserver alone misses it
   if (!iconsBar._uiapeAutoFitMutation) {
-    iconsBar._uiapeAutoFitMutation = new MutationObserver(() => requestAnimationFrame(measure));
+    iconsBar._uiapeAutoFitMutation = new MutationObserver(() => { if (!document.hidden) requestAnimationFrame(measure); });
     iconsBar._uiapeAutoFitMutation.observe(iconsBar, { childList: true, subtree: true });
   }
 }
