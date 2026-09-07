@@ -1206,7 +1206,8 @@ function uiapeBuildLiveCss(cfg) {
       padding-right: 18px;
     }
     html:not(.uiape-mobile-portrait) #data-rt0,
-    html:not(.uiape-mobile-portrait) #data-rt1 {
+    html:not(.uiape-mobile-portrait) #data-rt1,
+    html:not(.uiape-mobile-portrait) #data-station-name {
       font-size: 75%;
     }
   }
