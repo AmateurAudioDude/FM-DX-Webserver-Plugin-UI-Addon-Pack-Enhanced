@@ -1,5 +1,5 @@
 /*
-    UI Add-on Pack Enhanced v1.2.0 by AAD
+    UI Add-on Pack Enhanced v1.3.0 by AAD
     -------------------------------------
     https://github.com/AmateurAudioDude/FM-DX-Webserver-Plugin-UI-Addon-Pack-Enhanced
 */
@@ -7,6 +7,10 @@
 'use strict';
 
 (async () => {
+
+// User configuration
+const SIGNAL_OFFSET = 0.00;
+const ABBREVIATE_PTY = false;
 
 // Default for whether the config panel search box also matches setting descriptions, not just
 // titles. The checkbox beside the search box overrides it per user.
@@ -21,10 +25,8 @@ function uiapeSearchIncludesDescriptions() {
     return UIAPE_SEARCH_INCLUDE_DESCRIPTIONS;
   }
 }
-// Signal offset in dB
-const SIGNAL_OFFSET = 0.00;
 
-const pluginVersion = '1.2.0';
+const pluginVersion = '1.3.0';
 const pluginName = "UI Add-on Pack Enhanced";
 const pluginHomepageUrl = "https://github.com/AmateurAudioDude/FM-DX-Webserver-Plugin-UI-Addon-Pack-Enhanced";
 const pluginUpdateUrl = "https://raw.githubusercontent.com/AmateurAudioDude/FM-DX-Webserver-Plugin-UI-Addon-Pack-Enhanced/refs/heads/main/UIAddonPackEnhanced/UIAddonPackEnhanced.js";
@@ -64,6 +66,7 @@ try {
          ["MY_NEW_FEATURE", "checkbox", "My New Feature", "Short help text shown under the label."],
        Available types: "checkbox", "number", "text", "color", "select"
        (select needs a 5th array element: [["value","Label"], ...]).
+       Place it under the matching [null, "heading", "..."] line, if the section has headings.
 
     4. Implement it - two paths:
        a) Pure CSS (instant, no reload): add an
@@ -381,7 +384,7 @@ const UIAPE_DEFAULT_CONFIG = {
   MULTIPLE_USERS_NOTICE_MESSAGE_1: "This receiver is currently in use.",
   MULTIPLE_USERS_NOTICE_MESSAGE_2: "Please be considerate and mindful of other users before tuning.",
 
-  RDS_FLAG_INDICATOR: false,
+  RDS_FLAG_INDICATOR: "NONE",
 
   MULTIPATH_INDICATOR: false,
   MULTIPATH_ATTACH_TO: "STEREO",
@@ -677,6 +680,11 @@ function uiapeNormalizeConfig(config) {
     }
   });
 
+  // Was a checkbox before the A/B option
+  if (typeof merged.RDS_FLAG_INDICATOR === "boolean") {
+    merged.RDS_FLAG_INDICATOR = merged.RDS_FLAG_INDICATOR ? "BULLETS" : "NONE";
+  }
+
   return merged;
 }
 
@@ -836,6 +844,15 @@ function markUiapConfigClean(message = "Saved") {
   if (status) status.textContent = message;
 }
 
+// Admin text shown as HTML: everything escaped, then only attribute-free formatting tags and entities restored
+function uiapeSafeMessageHtml(value) {
+  return String(value ?? "")
+    .replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]))
+    .replace(/&lt;(\/?)(b|i|u|em|strong)&gt;/gi, "<$1$2>")
+    .replace(/&lt;br\s*\/?&gt;/gi, "<br>")
+    .replace(/&amp;(#\d+|#x[0-9a-f]+|[a-z][a-z0-9]*);/gi, "&$1;");
+}
+
 async function saveUiapConfig() {
   const targetProfile = uiapeDetectAdminSession() ? "admin" : "user";
   const normalizedConfig = uiapeNormalizeConfig(getUiapPanelConfig());
@@ -869,7 +886,7 @@ async function saveUiapConfig() {
   if (needsReload) {
     const reloadCfg = getUiapPanelConfig();
     const reloadBanWarningLine = reloadCfg.RELOAD_BAN_WARNING && reloadCfg.RELOAD_BAN_WARNING_MESSAGE
-      ? `<i>${reloadCfg.RELOAD_BAN_WARNING_MESSAGE}</i>\n\n`
+      ? `<i>${uiapeSafeMessageHtml(reloadCfg.RELOAD_BAN_WARNING_MESSAGE)}</i>\n\n`
       : "";
     const reloadNow = await confirmAsync(
       "Changes saved.\n\nSome of these settings will only take effect after the page reloads.\n\n" +
@@ -2903,6 +2920,7 @@ function createUiapConfigLauncher() {
       #uiape-config-panel,
       #uiape-config-panel .uiape-config-section,
       #uiape-config-panel .uiape-config-section-title,
+      #uiape-config-panel .uiape-config-subsection-title,
       #uiape-config-panel .uiape-config-label,
       #uiape-config-panel .uiape-config-label strong,
       #uiape-config-panel .uiape-config-label span,
@@ -3074,6 +3092,25 @@ function createUiapConfigLauncher() {
       }
 
       .uiape-config-row:first-of-type {
+        border-top: 0;
+      }
+
+      .uiape-config-subsection-title {
+        margin: 12px 0 2px;
+        padding: 7px 8px 5px;
+        border-bottom: 1px solid color-mix(in srgb, var(--color-4, #888) 34%, transparent);
+        color: var(--color-main-bright, var(--color-4));
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: .045em;
+        text-transform: uppercase;
+      }
+
+      .uiape-config-subsection-title:first-child {
+        margin-top: 0;
+      }
+
+      .uiape-config-subsection-title + .uiape-config-row {
         border-top: 0;
       }
 
@@ -3580,13 +3617,17 @@ function createUiapConfigLauncher() {
           </div>
           <div class="uiape-config-search">
             <input type="text" id="uiape-config-search-input" placeholder="Search settings\u2026" aria-label="Search settings" autocomplete="off">
-            <label class="uiape-search-option"><input type="checkbox" id="uiape-config-search-descriptions"> Also search descriptions</label>
+            <label class="uiape-search-option"><input type="checkbox" id="uiape-config-search-descriptions"> Include descriptions</label>
           </div>
           <div class="uiape-config-body">
             <div class="uiape-config-section">
-              <div class="uiape-config-section-title">Core / General Settings</div>
+              <div class="uiape-config-section-title">General Settings</div>
               <div data-uiape-controls="core"></div>
               <!--<div class="uiape-config-warning">Changes are kept as a draft until you press <strong>Save All & Reload</strong>. Admin saves go to <code>plugins_configs/UIAddonPackEnhanced.json</code>; user saves stay as browser-local overrides.</div>-->
+            </div>
+            <div class="uiape-config-section">
+              <div class="uiape-config-section-title">Indicator Settings</div>
+              <div data-uiape-controls="rds"></div>
             </div>
             <div class="uiape-config-section">
               <div class="uiape-config-section-title">Mobile / Sidebar / Users</div>
@@ -3597,12 +3638,8 @@ function createUiapConfigLauncher() {
               <div data-uiape-controls="tuning"></div>
             </div>
             <div class="uiape-config-section">
-              <div class="uiape-config-section-title">Visual Styling</div>
+              <div class="uiape-config-section-title">Visual Settings</div>
               <div data-uiape-controls="visual"></div>
-            </div>
-            <div class="uiape-config-section">
-              <div class="uiape-config-section-title">RDS / Stereo Icons</div>
-              <div data-uiape-controls="rds"></div>
             </div>
             <div class="uiape-config-section">
               <div class="uiape-config-section-title">Plugin Buttons</div>
@@ -3850,24 +3887,31 @@ function createUiapConfigLauncher() {
           core: [
             ["CANVAS_FADE_EFFECT", "checkbox", "Canvas fade effect", "Fade in the signal graph on page load."],
             ["RELOAD_BAN_WARNING", "checkbox", "Reload additional notice", "Shows an additional message in the save/reload prompt."],
-            ["RELOAD_BAN_WARNING_MESSAGE", "text", "Reload additional notice", "Shown in the save/reload prompt when the notice above is enabled."],
+            ["RELOAD_BAN_WARNING_MESSAGE", "text", "Reload additional notice", "Shown in the save/reload prompt when the notice above is enabled. Allows <b>, <i>, <u> and <br>."],
             ["BUTTON_FM_LIST_MOD", "checkbox", "FMList button mod", "Move/reduce the FMLIST button."],
             ["BUTTON_FM_LIST_MOD_MINIMUM_HIDE_DISTANCE", "number", "FMList hide distance", "Minimum distance in km before FMLIST button appears."]
           ],
           mobile: [
+            [null, "heading", "Mobile Interface Settings"],
+            ["DISPLAY_CANVAS_IN_LANDSCAPE_MODE", "checkbox", "Canvas in landscape (mobile)", "Mobile landscape canvas display."],
+            ["DISPLAY_CANVAS_IN_PORTRAIT_MODE", "checkbox", "Canvas in portrait (mobile)", "Mobile portrait canvas display."],
             ["MOVE_MOBILE_TRAY_TO_TOP", "checkbox", "Move mobile tray to top (mobile)", "Relocates the native mobile tray."],
             ["HIDE_MOBILE_TRAY", "checkbox", "Hide mobile tray (mobile)", "Hides the mobile tray except play button."],
             ["MOBILE_STATUS_BAR", "checkbox", "Mobile status bar (mobile)", "Shows fixed mobile status bar."],
             ["MOBILE_STATUS_BAR_SHOW_USERS", "checkbox", "Status bar users (mobile)", "Moves online users icon to status bar."],
             ["MOBILE_STATUS_BAR_CONNECTION", "checkbox", "Status bar connection (mobile)", "Shows audio stream status icon."],
+
+            [null, "heading", "Sidebar Settings"],
             ["SIDEBAR_ADDITIONS", "checkbox", "Sidebar additions", "Enables extra sidebar options."],
             ["SIDEBAR_ADDITIONS_EXPAND_CANVAS", "checkbox", "Sidebar expand canvas (enable Sidebar additions)", "Adds canvas height option."],
             ["SIDEBAR_ADDITIONS_HIDE_BACKGROUND", "checkbox", "Sidebar hide background (enable Sidebar additions)", "Adds background hide option."],
             ["REDUCE_SIDEBAR_BLUR", "checkbox", "Reduce sidebar blur", "Uses lighter blur when sidebar opens."],
+
+            [null, "heading", "Multiple Users Settings"],
             ["MULTIPLE_USERS_NOTICE", "checkbox", "Multiple users notice", "Shows notice when more users are connected."],
             ["MULTIPLE_USERS_NOTICE_NATIVE_POPUP", "checkbox", "Native popup notice", "Uses native popup style for multiple users notice."],
-            ["MULTIPLE_USERS_NOTICE_MESSAGE_1", "text", "Notice message 1", "First line of the multiple users notice."],
-            ["MULTIPLE_USERS_NOTICE_MESSAGE_2", "text", "Notice message 2", "Second line of the multiple users notice."]
+            ["MULTIPLE_USERS_NOTICE_MESSAGE_1", "text", "Notice message 1", "First line of the multiple users notice. Allows <b>, <i>, <u> and <br>."],
+            ["MULTIPLE_USERS_NOTICE_MESSAGE_2", "text", "Notice message 2", "Second line of the multiple users notice. Allows <b>, <i>, <u> and <br>."]
           ],
           tuning: [
             ["TUNE_DELAY_ENABLE", "checkbox", "Tune delay", "Enables delay for new users."],
@@ -3879,74 +3923,92 @@ function createUiapConfigLauncher() {
             ["S_UNITS_HIDE_LABEL", "checkbox", "Hide S-units label", "Hides the \"S-units\" text shown next to the reading."]
           ],
           visual: [
-            ["DISPLAY_CANVAS_IN_LANDSCAPE_MODE", "checkbox", "Canvas in landscape (mobile)", "Mobile landscape canvas display."],
-            ["DISPLAY_CANVAS_IN_PORTRAIT_MODE", "checkbox", "Canvas in portrait (mobile)", "Mobile portrait canvas display."],
+            [null, "heading", "Appearance Settings"],
             ["ADD_PADDING_TO_PANELS", "checkbox", "Add panel padding", "Adds padding to RT/PTY/PS panels."],
-            ["GLOW_EFFECT_ON_FREQUENCY_INPUT", "checkbox", "Frequency input glow", "Glow around frequency input while focused."],
+            ["PANEL_STYLE_EFFECT", "select", "Panel style effect", "Panel edge style preset.", [["0","Disabled"],["1","Style 1"],["2","Style 2"],["3","Style 3"]]],
+            ["PANEL_STYLE_EFFECT_SIGNAL_PANEL", "checkbox", "Signal panel style", "Applies panel style effect to signal panel."],
             ["REDUCE_HALF_OPACITY", "checkbox", "Reduce half opacity", "Makes inactive elements dimmer."],
             ["INCREASE_TOP_RIGHT_ICON_SIZE", "checkbox", "Larger top-right icons", "Slightly increases top-right icon size."],
             ["INCREASE_FREQUENCY_FONT_WEIGHT", "checkbox", "Bolder frequency", "Increases frequency font weight."],
+            ["GLOW_EFFECT_ON_FREQUENCY_INPUT", "checkbox", "Frequency input glow", "Glow around frequency input while focused."],
             ["GRADIENT_BUTTONS", "checkbox", "Gradient buttons", "Adds gradient styling to buttons."],
             ["INCLUDE_SCANNER_BUTTONS", "checkbox", "Gradient includes scanner buttons", "Extends gradient styling to scanner controls."],
-            ["LED_GLOW_EFFECT_ICONS", "checkbox", "Glow icons", "Glow effect for icon indicators."],
+
+            [null, "heading", "Text Glow Settings"],
             ["LED_GLOW_EFFECT_LARGE", "checkbox", "Glow large text", "Glow effect for large text/digits."],
             ["LED_GLOW_EFFECT_SMALL", "checkbox", "Glow small text", "Glow effect for small text/digits."],
             ["LED_GLOW_EFFECT_RDSPS", "checkbox", "Glow RDS PS", "Glow effect for RDS PS text."],
             ["LED_GLOW_EFFECT_FREQ", "checkbox", "Glow frequency", "Glow effect for frequency digits."],
+
+            [null, "heading", "RDS Text Settings"],
             ["DIM_INCOMPLETE_PI_CODE", "checkbox", "Dim incomplete PI", "Dims PI when it contains question marks."],
-            ["PANEL_STYLE_EFFECT", "select", "Panel style effect", "Panel edge style preset.", [["0","Disabled"],["1","Style 1"],["2","Style 2"],["3","Style 3"]]],
-            ["PANEL_STYLE_EFFECT_SIGNAL_PANEL", "checkbox", "Signal panel style", "Applies panel style effect to signal panel."],
-            ["VOLUME_PERCENTAGE_TOAST", "checkbox", "Volume toast", "Displays toast when volume changes."],
-            ["LOWER_TOAST_NOTIFICATIONS", "checkbox", "Lower toast notifications", "Moves toast notifications further down from the top of the screen."],
             ["REDUCE_TEXT_ON_NARROW_SCREENS", "checkbox", "Smaller PS/RT text when narrow", "Reduces PS and radiotext size on narrow screens."],
-            ["RDS_FLAG_INDICATOR", "checkbox", "RDS flag indicator", "Shows A/B bullet next to radiotext."]
+            ["RDS_FLAG_INDICATOR", "select", "RDS flag indicator", "Marks the active radiotext line with a bullet or an A:/B: label.", [["NONE","None"],["BULLETS","Bullets"],["AB","A/B"]]],
+
+            [null, "heading", "Notification Settings"],
+            ["VOLUME_PERCENTAGE_TOAST", "checkbox", "Volume toast", "Displays toast when volume changes."],
+            ["LOWER_TOAST_NOTIFICATIONS", "checkbox", "Lower toast notifications", "Moves toast notifications further down from the top of the screen."]
           ],
           rds: [
+            [null, "heading", "Icon System Settings"],
             ["RDS_ICON_STYLE", "checkbox", "Enable UI Addon Icons Style", "Enables RDS, PTY, TP, TA icons."],
             ["RDS_ICON_STYLE_MOBILE", "checkbox", "Enable UI Addon Icons Style on mobile", "Enables UI Addon Icons Style on mobile, and turns on the setting above too since this depends on it."],
-            ["PTY_DISPLAY_MODE", "select", "Show PTY as", "Choose how PTY label is displayed.", [["FULL", "Full label"], ["SHORT", "Short label"], ["ICON_SHORT", "Icon & short label"]]],
-            ["PTY_ICON_OFFSET_Y", "number", "PTY icon vertical offset", "Raises or lowers the PTY icon in pixels. Negative raises. Only used by Icon & short label."],
-            ["PTY_ICON_GAP", "number", "PTY icon spacing", "Gap in pixels between the PTY icon and its text. Only used by Icon & short label."],
-
-            ["IS_TEF_RADIO", "checkbox", "TEF radio mode", "Uses TEF radio MP assumption."],
             ["METRICS_MONITOR_PLUGIN_IS_INSTALLED", "checkbox", "Metrics Monitor installed", "Enable if Metrics Monitor plugin is installed."],
             ["IS_VISUALEQ_PLUGIN_ENABLED", "checkbox", "VisualEQ enabled", "Enable if VisualEQ plugin is installed."],
 
+            [null, "heading", "Layout Settings"],
+            ["RDS_ICON_SCALE", "number", "RDS icon scale", "Size in percentage."],
+            ["RDS_ICON_SCALE_AUTO_FIT", "checkbox", "Auto-fit RDS icon scale", "Shrinks the icon row below the set scale when it is too wide to fit."],
+            ["RDS_ICON_SCALE_AUTO_FIT_PADDING", "number", "Auto-fit padding", "Pixels kept clear at each end of the icon row. Negative allows it wider."],
+            ["RDS_ICON_SCALE_AUTO_FIT_PADDING_MM", "number", "Auto-fit padding (Metrics Monitor)", "Auto-fit padding used when Metrics Monitor owns the icon row."],
             ["HORIZONTAL_ICON_SPACING_MODE", "select", "Horizontal icon spacing", "Preset uses the individual spacing values below. Uniform uses one shared gap. Auto calculates a centered gap from the available row width and keeps the row away from the panel edges.", [["PRESET","Preset"],["UNIFORM","Uniform"],["AUTO","Auto"]]],
             ["HORIZONTAL_ICON_SPACING_UNIFORM", "number", "Uniform horizontal spacing", "Shared spacing in pixels when Horizontal icon spacing is Uniform."],
             ["HORIZONTAL_ICON_SPACING_AUTO_MIN", "number", "Auto spacing minimum", "Minimum gap in pixels used by Auto mode."],
             ["HORIZONTAL_ICON_SPACING_AUTO_MAX", "number", "Auto spacing maximum", "Maximum gap in pixels used by Auto mode."],
-
             ["RDS_ICON_PRESET", "select", "RDS icon preset", "0 user, 1 preset 1, 2 preset 2, 3 preset 3.", [["0","User defined"],["1","Preset 1"],["2","Preset 2"],["3","Preset 3"]]],
 
+            [null, "heading", "Stereo / MPX Settings"],
             ["STEREO_ICON_COLOR", "color", "Stereo icon color", "default, auto, or custom #RRGGBB."],
             ["STEREO_ICON_COLOR_OFF", "color", "Stereo off color", "default, auto, or custom #RRGGBB."],
             ["STEREO_ICON_WIDTH", "number", "Stereo icon width", "Stereo circle thickness."],
             ["STEREO_ICON_SCALE", "number", "Stereo icon scale", "Size in percentage. Normalised to match RDS visual size."],
             ["APPLY_STEREO_ICON_GLOW_WITH_MISSING_RDS", "checkbox", "Stereo glow without RDS", "Keeps stereo glow when RDS is missing."],
+            ["REPLACE_MPX_LOGO_WITH_STEREO_LOGO_METRICS_MONITOR_PLUGIN", "checkbox", "Replace MPX with stereo", "Metrics Monitor compatibility option."],
 
-            ["RDS_ICON_SCALE", "number", "RDS icon scale", "Size in percentage."],
-            ["RDS_ICON_SCALE_AUTO_FIT", "checkbox", "Auto-fit RDS icon scale", "Shrinks the icon row below the set scale when it is too wide to fit."],
-            ["RDS_ICON_SCALE_AUTO_FIT_PADDING", "number", "Auto-fit padding", "Pixels kept clear at each end of the icon row. Negative allows it wider."],
-            ["RDS_ICON_SCALE_AUTO_FIT_PADDING_MM", "number", "Auto-fit padding (Metrics Monitor)", "Auto-fit padding used when Metrics Monitor owns the icon row."],
-            ["RDS_ICON_STYLE_MS_OFF_AS_LETTERS", "checkbox", "MS off as letters", "Uses MS letters for dimmed Music/Speech icons."],
+            [null, "heading", "RDS Settings"],
             ["RDS_INDICATOR_ICON_TYPE", "select", "RDS indicator type", "RDS indicator icon type.", [["1","Type 1"],["2","Type 2"]]],
             ["RDS_INDICATOR_ICON_COLOR", "color", "RDS icon color", "default, auto, or custom #RRGGBB."],
             ["RDS_INDICATOR_ICON_COLOR_OFF", "color", "RDS off color", "default, auto, or custom #RRGGBB."],
-            ["RDS_INDICATOR_ICON_GLOW_INTENSITY", "number", "RDS glow intensity", "Numeric glow intensity."],
+            ["RDS_ICON_STYLE_REMOVE_RDS_ICON", "checkbox", "Remove RDS icon", "Useful with multipath/Metrics Monitor setups."],
+
+            [null, "heading", "TP / TA Settings"],
             ["TP_INDICATOR_ICON_COLOR", "color", "TP color", "default, auto, or custom #RRGGBB."],
             ["TP_INDICATOR_ICON_COLOR_OFF", "color", "TP off color", "default, auto, or custom #RRGGBB."],
             ["TA_INDICATOR_ICON_COLOR", "color", "TA color", "default, auto, or custom #RRGGBB."],
             ["TA_INDICATOR_ICON_COLOR_OFF", "color", "TA off color", "default, auto, or custom #RRGGBB."],
+
+            [null, "heading", "PTY / MS Settings"],
+            ["PTY_DISPLAY_MODE", "select", "Show PTY as", "Choose how PTY label is displayed.", [["FULL", "Full label"], ["SHORT", "Short label"], ["ICON_SHORT", "Icon & short label"]]],
+            ["PTY_ICON_OFFSET_Y", "number", "PTY icon vertical offset", "Raises or lowers the PTY icon in pixels. Negative raises. Only used by Icon & short label."],
+            ["PTY_ICON_GAP", "number", "PTY icon spacing", "Gap in pixels between the PTY icon and its text. Only used by Icon & short label."],
             ["PTY_INDICATOR_COLOR", "color", "PTY color", "default, auto, or custom #RRGGBB."],
             ["PTY_INDICATOR_COLOR_OFF", "color", "PTY off color", "default, auto, or custom #RRGGBB."],
             ["MS_INDICATOR_COLOR", "color", "MS color", "default, auto, or custom #RRGGBB."],
             ["MS_INDICATOR_COLOR_OFF", "color", "MS off color", "default, auto, or custom #RRGGBB."],
+            ["RDS_ICON_STYLE_MS_OFF_AS_LETTERS", "checkbox", "MS off as letters", "Uses MS letters for dimmed Music/Speech icons."],
+
+            [null, "heading", "ECC Settings"],
             ["ECC_DISPLAY_MODE", "select", "Show ECC as", "Choose how ECC country information is displayed using the webserver's native country flag/ISO code.", [["FLAG","Flag"],["COUNTRY_CODE","Country code"],["FLAG_CC","Flag & country code"]]],
             ["ECC_INDICATOR_COLOR", "color", "ECC active color", "default, auto, or custom #RRGGBB. Applies only to the country-code text and border; the flag is unchanged."],
-            ["LED_GLOW_EFFECT_ICONS_RDS_ICON_STYLE_ECC_CC", "checkbox", "ECC country code glow", "Glow effect for the ECC country code text and border only."],
             ["ECC_INDICATOR_COLOR_OFF", "color", "ECC off color", "default, auto, or custom #RRGGBB. Only affects the fallback label shown when there's no flag to display."],
-            ["RDS_ICON_STYLE_REMOVE_RDS_ICON", "checkbox", "Remove RDS icon", "Useful with multipath/Metrics Monitor setups."],
+            ["ECC_FLAG_SPACING_METRICS_MONITOR", "number", "ECC flag spacing (Metrics Monitor)", "Extra left offset that aligns the ECC flag with the ECC text icon, only used when Metrics Monitor installed is enabled."],
+
+            [null, "heading", "Bandwidth Settings"],
+            ["BANDWIDTH_UPDATE_INTERVAL", "number", "Bandwidth update interval", "Milliseconds."],
+            ["BW_INDICATOR_COLOR", "color", "BW color", "default, auto, or custom #RRGGBB."],
+            ["BW_INDICATOR_COLOR_OFF", "color", "BW off color", "default, auto, or custom #RRGGBB."],
+
+            [null, "heading", "Multipath Settings"],
             ["MULTIPATH_INDICATOR", "checkbox", "Multipath indicator", "Adds multipath icon/text."],
             ["MULTIPATH_ATTACH_TO", "select", "Multipath attach to", "Target icon for multipath indicator.", [["STEREO","STEREO"],["PTY","PTY"],["MS","MS"],["ECC","ECC"],["TP","TP"],["TA","TA"],["RDS","RDS"],["BW","BW"]]],
             ["MULTIPATH_LEFT_PADDING", "number", "Multipath left padding", "Spacing when not attached to Stereo/Mono."],
@@ -3954,15 +4016,16 @@ function createUiapConfigLauncher() {
             ["MULTIPATH_TEXT_SIZE", "number", "Multipath text size", "Size in percentage. Font size for the RF/MP text."],
             ["MULTIPATH_INDICATOR_COLOR", "color", "Multipath color", "default, auto, or custom #RRGGBB."],
             ["MULTIPATH_INDICATOR_COLOR_OFF", "color", "Multipath off color", "default, auto, or custom #RRGGBB."],
-            ["BANDWIDTH_UPDATE_INTERVAL", "number", "Bandwidth update interval", "Milliseconds."],
-            ["BW_INDICATOR_COLOR", "color", "BW color", "default, auto, or custom #RRGGBB."],
-            ["BW_INDICATOR_COLOR_OFF", "color", "BW off color", "default, auto, or custom #RRGGBB."],
+            ["IS_TEF_RADIO", "checkbox", "TEF radio mode", "Uses TEF radio MP assumption."],
+
+            [null, "heading", "Icon Glow Settings"],
+            ["LED_GLOW_EFFECT_ICONS", "checkbox", "Glow icons", "Glow effect for icon indicators."],
+            ["LED_GLOW_EFFECT_ICONS_METRICS_MONITOR_PLUGIN", "checkbox", "Metrics icon glow", "Glow for Metrics Monitor icons."],
             ["LED_GLOW_EFFECT_ICONS_RDS_ICON_STYLE_PTY", "checkbox", "PTY icon glow", "Glow effect for PTY RDS icon style."],
             ["LED_GLOW_EFFECT_ICONS_RDS_ICON_STYLE_MS", "checkbox", "MS icon glow", "Glow effect for MS RDS icon style."],
+            ["LED_GLOW_EFFECT_ICONS_RDS_ICON_STYLE_ECC_CC", "checkbox", "ECC country code glow", "Glow effect for the ECC country code text and border only."],
             ["LED_GLOW_EFFECT_ICONS_BANDWIDTH", "checkbox", "Bandwidth icon glow", "Glow effect for bandwidth."],
-            ["LED_GLOW_EFFECT_ICONS_METRICS_MONITOR_PLUGIN", "checkbox", "Metrics icon glow", "Glow for Metrics Monitor icons."],
-            ["REPLACE_MPX_LOGO_WITH_STEREO_LOGO_METRICS_MONITOR_PLUGIN", "checkbox", "Replace MPX with stereo", "Metrics Monitor compatibility option."],
-            ["ECC_FLAG_SPACING_METRICS_MONITOR", "number", "ECC flag spacing (Metrics Monitor)", "Extra left offset that aligns the ECC flag with the ECC text icon, only used when Metrics Monitor installed is enabled."]
+            ["RDS_INDICATOR_ICON_GLOW_INTENSITY", "number", "RDS glow intensity", "Numeric glow intensity."]
           ],
           plugins: [
             ["SORT_PLUGIN_BUTTONS", "checkbox", "Sort plugin buttons", "Enables custom plugin button order."],
@@ -4120,6 +4183,7 @@ function createUiapConfigLauncher() {
           const label = def[2];
           const help = def[3] || "";
           const options = def[4] || [];
+          if (type === "heading") return `<div class="uiape-config-subsection-title">${uiapeEscapeHtml(label)}</div>`;
           const config = getUiapPanelConfig();
           const value = config[key];
           const resetButtonHtml = uiapeRenderResetButton("reset-field", key, !uiapeValuesEqual(value, uiapeBaselineValue(key)));
@@ -4345,15 +4409,19 @@ function createUiapConfigLauncher() {
           Object.keys(uiapeControlSections).forEach(sectionName => {
             const target = panel.querySelector(`[data-uiape-controls="${sectionName}"]`);
             if (!target) return;
-            const visibleDefs = uiapeControlSections[sectionName].filter(uiapeIsControlVisibleForCurrentUser);
+            const permittedDefs = uiapeControlSections[sectionName].filter(uiapeIsControlVisibleForCurrentUser);
+            // Headings are dropped when every setting under them is admin-only
+            const visibleDefs = permittedDefs.filter((def, i) => def[1] !== "heading" || (permittedDefs[i + 1] && permittedDefs[i + 1][1] !== "heading"));
             const rendered = visibleDefs.map(uiapeRenderControl);
 
             // "rds" and "plugins" render extra content, so they're never considered empty even if every field is admin-only
             const hasExtraContent = sectionName === "rds" || sectionName === "plugins";
             if (sectionName === "rds") {
-              // Inserted right after RDS_ICON_PRESET so the dropdown and its editor stay adjacent
-              const presetIndex = visibleDefs.findIndex(def => def[0] === "RDS_ICON_PRESET");
-              rendered.splice(presetIndex === -1 ? rendered.length : presetIndex + 1, 0, uiapeRenderRdsPresetEditor());
+              // Inserted where RDS_ICON_PRESET is, or would be if admin-only, so it stays under the Layout heading
+              const allDefs = uiapeControlSections[sectionName];
+              const presetPosition = allDefs.findIndex(def => def[0] === "RDS_ICON_PRESET");
+              const insertAt = visibleDefs.filter(def => allDefs.indexOf(def) <= presetPosition).length;
+              rendered.splice(insertAt, 0, uiapeRenderRdsPresetEditor());
             }
             target.innerHTML = rendered.join("");
             if (sectionName === "plugins") target.insertAdjacentHTML("beforeend", uiapeRenderPluginOrderHelper());
@@ -4381,6 +4449,7 @@ function createUiapConfigLauncher() {
             if (!query) {
               // Rows use display grid, which overrides the hidden attribute, so use an inline style instead
               rows.forEach(rowEl => { rowEl.style.display = ""; });
+              uiapeSyncSubsectionHeadings(sectionEl);
               // Restore the section's own non-search hidden state.
               sectionEl.hidden = sectionEl.dataset.uiapeEmpty === "true";
               return;
@@ -4393,7 +4462,21 @@ function createUiapConfigLauncher() {
               rowEl.style.display = matches ? "" : "none";
               if (matches) sectionHasMatch = true;
             });
+            uiapeSyncSubsectionHeadings(sectionEl);
             sectionEl.hidden = !sectionHasMatch;
+          });
+        }
+
+        function uiapeSyncSubsectionHeadings(sectionEl) {
+          sectionEl.querySelectorAll(".uiape-config-subsection-title").forEach(heading => {
+            let hasVisibleRow = false;
+            for (let el = heading.nextElementSibling; el && !el.classList.contains("uiape-config-subsection-title"); el = el.nextElementSibling) {
+              if (el.classList.contains("uiape-config-row") && el.style.display !== "none") {
+                hasVisibleRow = true;
+                break;
+              }
+            }
+            heading.style.display = hasVisibleRow ? "" : "none";
           });
         }
 
@@ -5957,7 +6040,7 @@ function popupMethod(selector, title, contentHtml) {
     const $header = $popup.find(".popup-header");
     const $title = $header.find("p.color-4");
     if ($title.length && !$title.hasClass("popup-title")) $title.addClass("popup-title");
-    $popup.find(".popup-title").text(title);
+    $popup.find(".popup-title").html(uiapeSafeMessageHtml(title));
     $popup.find(".popup-content").html(`<p style="text-align: center;">${contentHtml}</p>`);
     setTimeout(() => {
         togglePopup(selector);
@@ -5971,9 +6054,9 @@ let intervalIdUsersOnline = setInterval(function() {
         if (document.body.textContent.includes("You are logged in as an administrator.") || document.body.textContent.includes("You are logged in as an adminstrator.") || document.body.textContent.includes("You are logged in and can control the receiver.")) return;
         if (usersOnline >= 2) {
             if (MULTIPLE_USERS_NOTICE_NATIVE_POPUP) {
-                popupMethod(popupId, MULTIPLE_USERS_NOTICE_MESSAGE_1, `${MULTIPLE_USERS_NOTICE_MESSAGE_2}<br><br>`);
+                popupMethod(popupId, MULTIPLE_USERS_NOTICE_MESSAGE_1, `${uiapeSafeMessageHtml(MULTIPLE_USERS_NOTICE_MESSAGE_2)}<br><br>`);
             } else {
-                if (usersOnline >= 2) alert(`<div class="popup-plugin-content">${MULTIPLE_USERS_NOTICE_MESSAGE_1}<br><br>${MULTIPLE_USERS_NOTICE_MESSAGE_2}<br><br></div>`, `OK`);
+                if (usersOnline >= 2) alert(`<div class="popup-plugin-content">${uiapeSafeMessageHtml(MULTIPLE_USERS_NOTICE_MESSAGE_1)}<br><br>${uiapeSafeMessageHtml(MULTIPLE_USERS_NOTICE_MESSAGE_2)}<br><br></div>`, `OK`);
             }
         }
             
@@ -5986,10 +6069,50 @@ setTimeout(function() {
 }, 15000);
 }
 
+// #################### SOCKET #################### //
+// main.js replaces window.socket with a new object on reconnect, so listeners are moved across to it
+const uiapeSocketListeners = new Set();
+let uiapeSocketCurrent = null;
+let uiapeSocketRetryTimer = null;
+
+function uiapeSocketWatch() {
+  if (uiapeSocketRetryTimer) return;
+  uiapeSocketRetryTimer = setInterval(uiapeSocketAttach, 1000);
+}
+
+function uiapeSocketAttach() {
+  const socket = window.socket;
+  if (!socket || socket.readyState === WebSocket.CLOSED || socket.readyState === WebSocket.CLOSING) {
+    uiapeSocketWatch();
+    return;
+  }
+  clearInterval(uiapeSocketRetryTimer);
+  uiapeSocketRetryTimer = null;
+  if (socket === uiapeSocketCurrent) return;
+
+  if (uiapeSocketCurrent) {
+    uiapeSocketCurrent.removeEventListener('close', uiapeSocketWatch);
+    uiapeSocketListeners.forEach(listener => uiapeSocketCurrent.removeEventListener('message', listener));
+    console.log(`[${pluginName}] Reattached to the new WebSocket.`);
+  }
+  uiapeSocketCurrent = socket;
+  socket.addEventListener('close', uiapeSocketWatch);
+  uiapeSocketListeners.forEach(listener => socket.addEventListener('message', listener));
+}
+
+function uiapeOnSocketMessage(listener) {
+  uiapeSocketListeners.add(listener);
+  if (uiapeSocketCurrent) uiapeSocketCurrent.addEventListener('message', listener);
+  uiapeSocketAttach();
+  return () => {
+    uiapeSocketListeners.delete(listener);
+    if (uiapeSocketCurrent) uiapeSocketCurrent.removeEventListener('message', listener);
+  };
+}
+
 // #################### RDS FLAG INDICATOR #################### //
 // Runs unconditionally so the toggle stays live, handle_RDS_FLAG_INDICATOR reads current config on every message
 let uiapeRdsFlagLastProcessedTime = 0;
-let uiapeRdsFlagReconnectAttempts = 0;
 let uiapeRdsFlagDomReady = false;
 
 const UIAPE_RDS_FLAG_TIMEOUT_DURATION = 75;
@@ -5998,39 +6121,12 @@ uiapeOnDomReady(() => {
     uiapeRdsFlagDomReady = true;
 });
 
-function uiapeConnectRdsFlagWebSocket() {
-    if (window.socket.readyState === WebSocket.OPEN) {
-        uiapeRdsFlagReconnectAttempts = 0;
-    }
-
-    window.socket.addEventListener('message', (event) => {
-        handle_RDS_FLAG_INDICATOR(event);
-    });
-
-    window.socket.addEventListener('close', () => {
-        console.log(`[${pluginName}] RDS_FLAG_INDICATOR: WebSocket closed. Attempting to reconnect...`);
-        uiapeAttemptReconnectRdsFlag();
-    });
-
-    window.socket.addEventListener('error', (err) => {
-        uiapeAttemptReconnectRdsFlag();
-    });
-}
-
-function uiapeAttemptReconnectRdsFlag() {
-    if (uiapeRdsFlagReconnectAttempts >= 500) return;
-
-    setTimeout(() => {
-        uiapeRdsFlagReconnectAttempts++;
-        uiapeConnectRdsFlagWebSocket();
-    }, 10000);
-}
-
 function handle_RDS_FLAG_INDICATOR(event) {
     const rtElement0 = document.querySelector('#data-rt0');
     const rtElement1 = document.querySelector('#data-rt1');
+    const mode = getUiapPanelConfig().RDS_FLAG_INDICATOR;
 
-    if (!getUiapPanelConfig().RDS_FLAG_INDICATOR) {
+    if (mode !== "BULLETS" && mode !== "AB") {
         if (rtElement0 && rtElement0.querySelector('span.bullet')) rtElement0.removeChild(rtElement0.querySelector('span.bullet'));
         if (rtElement1 && rtElement1.querySelector('span.bullet')) rtElement1.removeChild(rtElement1.querySelector('span.bullet'));
         return;
@@ -6041,16 +6137,26 @@ function handle_RDS_FLAG_INDICATOR(event) {
     if (now - uiapeRdsFlagLastProcessedTime < UIAPE_RDS_FLAG_TIMEOUT_DURATION) return;
     uiapeRdsFlagLastProcessedTime = now;
 
-    const { rt_flag } = JSON.parse(event.data);
+    let message;
+    try { message = JSON.parse(event.data); } catch (error) { return; }
+    const { rt_flag } = message;
     const bullet = document.createElement('span');
 
     if (rtElement0 && rtElement0.querySelector('span.bullet')) rtElement0.removeChild(rtElement0.querySelector('span.bullet'));
     if (rtElement1 && rtElement1.querySelector('span.bullet')) rtElement1.removeChild(rtElement1.querySelector('span.bullet'));
 
     bullet.classList.add('bullet');
-    bullet.textContent = '\u2022 ';
     bullet.style.position = 'absolute';
-    bullet.style.marginLeft = '-18px';
+    if (mode === "AB") {
+      bullet.textContent = rt_flag === 0 ? 'A:' : 'B:';
+      bullet.style.fontWeight = 'bold';
+      // Ends just before the text, whatever the font size
+      bullet.style.marginLeft = '-0.3em';
+      bullet.style.transform = 'translateX(-100%)';
+    } else {
+      bullet.textContent = '\u2022 ';
+      bullet.style.marginLeft = '-18px';
+    }
 
     if (rtElement0) rtElement0.style.position = 'relative';
     if (rtElement1) rtElement1.style.position = 'relative';
@@ -6066,7 +6172,7 @@ function handle_RDS_FLAG_INDICATOR(event) {
     if (uiapeRdsFlagDomReady) updateBulletPoint(rt_flag);
 }
 
-uiapeConnectRdsFlagWebSocket();
+uiapeOnSocketMessage(handle_RDS_FLAG_INDICATOR);
 
 // #################### MULTIPATH INDICATOR #################### //
 
@@ -6093,13 +6199,15 @@ const UIAPE_MULTIPATH_THRESHOLD = 40;
 const UIAPE_SIGNAL_THRESHOLD = 25;
 const UIAPE_MULTIPATH_TIMEOUT_DURATION = 800;
 
-socket.addEventListener("message", (event) => {
+uiapeOnSocketMessage((event) => {
     const now = Date.now();
 
     if (now - uiapeMultipathLastProcessedTime < UIAPE_MULTIPATH_TIMEOUT_DURATION) return;
     uiapeMultipathLastProcessedTime = now;
 
-    const { sigRaw, freq } = JSON.parse(event.data);
+    let message;
+    try { message = JSON.parse(event.data); } catch (error) { return; }
+    const { sigRaw, freq } = message;
 
     if (sigRaw) {
         const sigRawValues = sigRaw.split(',');
@@ -6638,7 +6746,9 @@ uiapeOnDomReady(() => {
         if (now - lastProcessedTime < TIMEOUT_DURATION) return;
         lastProcessedTime = now;
 
-        const { users } = JSON.parse(event.data);
+        let message;
+        try { message = JSON.parse(event.data); } catch (error) { return; }
+        const { users } = message;
 
         if (users > -1) {
             userOnlineCount = Number(users);
@@ -6669,14 +6779,14 @@ uiapeOnDomReady(() => {
                     el.style.pointerEvents = "auto";
                 });
 
-                socket.removeEventListener("message", handleMessage);
+                stopUserCountListener();
             }
 
             if (userOnlineCount === 0) userUnlockTuning(0);
         }
     }
 
-    socket.addEventListener("message", handleMessage);
+    const stopUserCountListener = uiapeOnSocketMessage(handleMessage);
 
     let isCountdownTimerRunning = false;
     
@@ -7197,12 +7307,17 @@ const WEBSOCKET_URL  = `${protocol}//${WebserverURL}:${WebserverPORT}${Webserver
 let TextSocket;
 let levels = { hf: 0 };
 
+let LIGHT_CLASSICAL = ABBREVIATE_PTY ? "L. Classical" : "Light Classical";
+let SERIOUS_CLASSICAL = ABBREVIATE_PTY ? "S. Classical" : "Serious Classical";
+let SOCIAL_AFFAIRS = ABBREVIATE_PTY ? "S. Affairs" : "Social Affairs";
+let CHILDRENS_PROGRAMMES = ABBREVIATE_PTY ? "Children's" : "Children's Programmes";
+
 const PTY_TABLE = [
   "PTY", "News", "Current Affairs", "Info",
   "Sport", "Education", "Drama", "Culture", "Science", "Varied",
-  "Pop Music", "Rock Music", "Easy Listening", "Light Classical",
-  "Serious Classical", "Other Music", "Weather", "Finance",
-  "Children's Programmes", "Social Affairs", "Religion", "Phone-in",
+  "Pop Music", "Rock Music", "Easy Listening", LIGHT_CLASSICAL,
+  SERIOUS_CLASSICAL, "Other Music", "Weather", "Finance",
+  CHILDRENS_PROGRAMMES, SOCIAL_AFFAIRS, "Religion", "Phone-in",
   "Travel", "Leisure", "Jazz Music", "Country Music", "National Music",
   "Oldies Music", "Folk Music", "Documentary"
 ];
@@ -7464,39 +7579,13 @@ function uiapeGetRdsIconWebp(isOn) {
 
 const off_opacity = REDUCE_HALF_OPACITY === true ? '0.6' : '0.9';
 
-async function setupTextSocket() {
-  if (TextSocket && TextSocket.readyState !== WebSocket.CLOSED) {
-    return;
-  } else {
-      setTimeout(setupTextSocket, 10000);
-  }
-
-  try {
-    TextSocket = await window.socket;
-
-    TextSocket.addEventListener("open", () => {
-      logInfo("TextSocket connected.");
-    });
-
-    TextSocket.addEventListener("message", (event) => {
-      const message = JSON.parse(event.data);
-      handleTextSocketMessage(message);
-    });
-
-    TextSocket.addEventListener("error", (error) => {
-      logError("TextSocket error:", error);
-    });
-
-    TextSocket.addEventListener("close", () => {
-      setTimeout(() => {
-          logInfo("TextSocket closed.");
-      }, 800);
-      setTimeout(setupTextSocket, 5000);
-    });
-  } catch (error) {
-    logError("Failed to setup TextSocket:", error);
-    setTimeout(setupTextSocket, 5000);
-  }
+function setupTextSocket() {
+  if (TextSocket) return;
+  TextSocket = uiapeOnSocketMessage((event) => {
+    let message;
+    try { message = JSON.parse(event.data); } catch (error) { return; }
+    handleTextSocketMessage(message);
+  });
 }
 
 // Music/Speech
@@ -8221,8 +8310,7 @@ function handleTextSocketMessage(message) {
       applyRdsIndicatorColor(rdsIcon, false);
     }
 
-    if (!rdsIcon.dataset.uiapeThemeObserver) {
-      rdsIcon.dataset.uiapeThemeObserver = "1";
+    if (!rdsIcon._uiapeThemeObserver) {
       const rdsThemeObserver = new MutationObserver(() => {
         applyRdsIndicatorColor(
           rdsIcon,
@@ -8230,6 +8318,7 @@ function handleTextSocketMessage(message) {
         );
       });
       rdsThemeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style'] });
+      rdsIcon._uiapeThemeObserver = rdsThemeObserver;
     }
   }
 
@@ -8526,6 +8615,14 @@ function uiapeMeasureDirectRowItems(row) {
   }, 0);
 }
 
+// Layout pixels, unaffected by any scale on the bar, to match the gap value written back
+function uiapeMeasureDirectRowItemsLocal(row) {
+  return Array.from(row.children).reduce((sum, el) => {
+    const cs = getComputedStyle(el);
+    return sum + el.offsetWidth + (parseFloat(cs.marginLeft) || 0) + (parseFloat(cs.marginRight) || 0);
+  }, 0);
+}
+
 function uiapeDisposeAutoSpacingObserver(row) {
   if (!row?._uiapeSpacingObserver) return;
   try {
@@ -8543,8 +8640,8 @@ function uiapeApplyAutoHorizontalSpacing(row, spacingCfg) {
       return;
     }
 
-    const rowWidth = row.getBoundingClientRect().width;
-    const contentWidth = uiapeMeasureDirectRowItems(row);
+    const rowWidth = row.clientWidth;
+    const contentWidth = uiapeMeasureDirectRowItemsLocal(row);
     const safeWidth = Math.max(0, rowWidth * 0.92);
     const rawGap = (safeWidth - contentWidth) / Math.max(items.length - 1, 1);
     const gap = Math.max(spacingCfg.autoMin, Math.min(rawGap, spacingCfg.autoMax));
@@ -8817,6 +8914,7 @@ function insertSignalPanel() {
   // rebuilds (closing) the whole settings panel.
   const existingGear = document.getElementById('uiape-config-gear');
 
+  signalPanelElement.querySelector('#rdsIcon')?._uiapeThemeObserver?.disconnect();
   signalPanelElement.innerHTML = '';
 
   if (existingGear) signalPanelElement.appendChild(existingGear);
@@ -8882,6 +8980,7 @@ function uiapeTeardownRdsIconStylePanel() {
     // self-healing observer doesn't see a mismatch and rebuild (closing) the settings panel
     const existingGear = signalPanelElement.querySelector(':scope > #uiape-config-gear');
     if (existingGear) nativeContainer.appendChild(existingGear);
+    signalPanelElement.querySelector('#rdsIcon')?._uiapeThemeObserver?.disconnect();
     signalPanelElement.remove();
   }
   if (nativeContainer) nativeContainer.style.display = '';

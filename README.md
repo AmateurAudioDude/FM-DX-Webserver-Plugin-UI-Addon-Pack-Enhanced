@@ -15,6 +15,15 @@ A collection of visual enhancements for FM-DX Webserver. Features may be added/r
 
 ###### Includes code and assistance from Highpoint2000 & MCelliotG.
 
+v1.3.0
+------
+* Added RDS flag indicator: A/B option
+* Settings panel reorganised
+* Fixed RDS flag/multipath freezing after reconnect 
+* Fixed observer leak on preset change
+* Fixed wrong Auto spacing when scaled
+* Minor fixes
+
 v1.2.0
 ------
 * Added `Auto-fit RDS icon scale`, `Auto-fit padding`, `Auto-fit padding (Metrics Monitor)`, `PTY icon spacing`, `PTY icon vertical offset`, `Lower toast notifications`, `Smaller PS/RT text when narrow`
