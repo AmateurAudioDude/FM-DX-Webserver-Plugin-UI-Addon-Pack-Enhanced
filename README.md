@@ -15,6 +15,10 @@ A collection of visual enhancements for FM-DX Webserver. Features may be added/r
 
 ###### Includes code and assistance from Highpoint2000 & MCelliotG.
 
+v1.3.1
+------
+* Fixed compatibility issues with FM-DX Webserver v1.4.0c ECC flags and spacing
+
 v1.3.0
 ------
 * Added RDS flag indicator: A/B option

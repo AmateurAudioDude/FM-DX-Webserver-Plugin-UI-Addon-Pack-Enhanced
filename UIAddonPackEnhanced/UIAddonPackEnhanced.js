@@ -1,5 +1,5 @@
 /*
-    UI Add-on Pack Enhanced v1.3.0 by AAD
+    UI Add-on Pack Enhanced v1.3.1 by AAD
     -------------------------------------
     https://github.com/AmateurAudioDude/FM-DX-Webserver-Plugin-UI-Addon-Pack-Enhanced
 */
@@ -26,7 +26,7 @@ function uiapeSearchIncludesDescriptions() {
   }
 }
 
-const pluginVersion = '1.3.0';
+const pluginVersion = '1.3.1';
 const pluginName = "UI Add-on Pack Enhanced";
 const pluginHomepageUrl = "https://github.com/AmateurAudioDude/FM-DX-Webserver-Plugin-UI-Addon-Pack-Enhanced";
 const pluginUpdateUrl = "https://raw.githubusercontent.com/AmateurAudioDude/FM-DX-Webserver-Plugin-UI-Addon-Pack-Enhanced/refs/heads/main/UIAddonPackEnhanced/UIAddonPackEnhanced.js";
@@ -2206,12 +2206,24 @@ function uiapeGetNativeEccCountryInfo() {
   const eccSpan = document.querySelector('.data-flag:not(#eccWrapper *)');
   if (!eccSpan || !eccSpan.innerHTML.trim()) return null;
 
+  let countryCode = '';
+  let countryName = '';
+  let tooltip = '';
   const flagIcon = eccSpan.querySelector('i[class*="flag-sm-"]');
-  if (!flagIcon) return null;
+  // Webserver v1.4.0c+ uses SVG images
+  const flagImg = eccSpan.querySelector('img[src*="/flags/"]');
 
-  const classes = String(flagIcon.className || '').split(/\s+/);
-  const isoClass = classes.find(cls => /^flag-sm-[a-z]{2}$/i.test(cls));
-  const countryCode = isoClass ? isoClass.slice('flag-sm-'.length).toUpperCase() : '';
+  if (flagIcon) {
+    const classes = String(flagIcon.className || '').split(/\s+/);
+    const isoClass = classes.find(cls => /^flag-sm-[a-z]{2}$/i.test(cls));
+    countryCode = isoClass ? isoClass.slice('flag-sm-'.length).toUpperCase() : '';
+    countryName = flagIcon.getAttribute('title') || '';
+  } else if (flagImg) {
+    const isoMatch = (flagImg.getAttribute('src') || '').match(/\/flags\/([a-z]{2})\.svg$/i);
+    countryCode = isoMatch ? isoMatch[1].toUpperCase() : '';
+    tooltip = flagImg.getAttribute('data-tooltip') || '';
+    countryName = tooltip.replace(/\s+-\s+ECC\s+[0-9a-f]+$/i, '');
+  }
 
   // "UN" is the Webserver's unknown/unresolved country placeholder,
   // not a valid ECC country to expose in the enhanced indicator.
@@ -2220,7 +2232,8 @@ function uiapeGetNativeEccCountryInfo() {
   return {
     source: eccSpan,
     countryCode,
-    countryName: flagIcon.getAttribute('title') || ''
+    countryName,
+    tooltip
   };
 }
 
@@ -2549,6 +2562,36 @@ function uiapeCreateEccCountryCodeElement(countryCode, countryName, heightPx, ac
   return code;
 }
 
+// Uses the Webserver v1.4.0c+ flag tooltip, empty text detaches it
+function uiapeSetEccTooltip(eccWrapper, text) {
+  if (typeof initTooltips !== "function" || typeof $ !== "function") return false;
+  const $wrapper = $(eccWrapper);
+
+  if (!text) {
+    if (eccWrapper._uiapeTooltipBound) {
+      clearTimeout($wrapper.data('timeout'));
+      $wrapper.off('mouseenter mouseleave');
+      if (eccWrapper.matches(':hover')) $('.tooltip-wrapper').remove();
+      eccWrapper.classList.remove('tooltip');
+      eccWrapper.removeAttribute('data-tooltip');
+      eccWrapper._uiapeTooltipBound = false;
+    }
+    return false;
+  }
+
+  if (eccWrapper.getAttribute('data-tooltip') !== text) {
+    eccWrapper.setAttribute('data-tooltip', text);
+    // jQuery caches data-* on first read
+    $wrapper.data('tooltip', text);
+  }
+  if (!eccWrapper._uiapeTooltipBound) {
+    eccWrapper._uiapeTooltipBound = true;
+    eccWrapper.classList.add('tooltip');
+    initTooltips(eccWrapper);
+  }
+  return true;
+}
+
 function uiapeAppendActiveEccContent(eccWrapper, eccPreset, liveCfg, mmInstalled) {
   const info = uiapeGetNativeEccCountryInfo();
   if (!info) return false;
@@ -2579,6 +2622,8 @@ function uiapeAppendActiveEccContent(eccWrapper, eccPreset, liveCfg, mmInstalled
     flagClone.style.transform = 'translateY(0)';
     flagClone.style.display = 'inline-flex';
     flagClone.style.alignItems = 'center';
+    flagClone.style.justifyContent = 'center';
+    flagClone.style.width = '24px';
     flagClone.style.height = '17px';
     flagClone.style.lineHeight = '17px';
     eccWrapper.appendChild(flagClone);
@@ -2597,7 +2642,12 @@ function uiapeAppendActiveEccContent(eccWrapper, eccPreset, liveCfg, mmInstalled
     appendFlag();
   }
 
-  eccWrapper.title = info.countryName || info.countryCode;
+  if (uiapeSetEccTooltip(eccWrapper, info.tooltip)) {
+    eccWrapper.removeAttribute('title');
+    eccWrapper.querySelectorAll('[title]').forEach(el => el.removeAttribute('title'));
+  } else {
+    eccWrapper.title = info.countryName || info.countryCode;
+  }
   const iso3 = uiapeIso3FromIso2(info.countryCode);
   eccWrapper.setAttribute('aria-label', info.countryName
     ? `${info.countryName} (${iso3})`
@@ -6383,7 +6433,11 @@ function addRandomIcon(result) {
     const iconSpan = document.createElement('span');
     iconSpan.classList.add('multipath-container');
     //if (!cfg.METRICS_MONITOR_PLUGIN_IS_INSTALLED) {
-        iconSpan.style.marginLeft = `${!uiapeIsVisualEqActive(cfg) && (cfg.RDS_ICON_STYLE || isRdsStyleMode) ? cfg.MULTIPATH_LEFT_PADDING : 8}px`;
+        // Webserver v1.4.0c+ spaces the native row with a gap
+        const nativeRowGap = !uiapeIsVisualEqActive(cfg) && !(cfg.RDS_ICON_STYLE || isRdsStyleMode)
+          ? parseFloat(getComputedStyle(targetSpan.parentNode).columnGap) || 0
+          : 0;
+        iconSpan.style.marginLeft = `${!uiapeIsVisualEqActive(cfg) && (cfg.RDS_ICON_STYLE || isRdsStyleMode) ? cfg.MULTIPATH_LEFT_PADDING : 8 - nativeRowGap}px`;
         iconSpan.style.marginTop = `${!uiapeIsVisualEqActive(cfg) && (cfg.RDS_ICON_STYLE || isRdsStyleMode) ? 0 : 2}px`;
     //}
     iconSpan.style.verticalAlign = 'middle';
@@ -8204,6 +8258,9 @@ function handleTextSocketMessage(message) {
         eccWrapper.innerHTML = "";
 
         if (!uiapeAppendActiveEccContent(eccWrapper, eccPreset, liveCfg, mmInstalled)) {
+            uiapeSetEccTooltip(eccWrapper, '');
+            eccWrapper.removeAttribute('title');
+            eccWrapper.removeAttribute('aria-label');
             const noEcc = document.createElement('span');
             noEcc.textContent = 'ECC';
             noEcc.style.color = noEccColor;
