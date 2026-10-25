@@ -448,7 +448,7 @@ const UIAPE_DEFAULT_CONFIG = {
   HORIZONTAL_ICON_SPACING_AUTO_MIN: 4,
   HORIZONTAL_ICON_SPACING_AUTO_MAX: 14,
   METRICS_MONITOR_PLUGIN_IS_INSTALLED: false,
-  ECC_FLAG_SPACING_METRICS_MONITOR: 9,
+  ECC_FLAG_SPACING_METRICS_MONITOR: -2,
   IS_VISUALEQ_PLUGIN_ENABLED: false,
 
   RDS_ICON_PRESET: 1,
@@ -2572,21 +2572,15 @@ function uiapeSetEccTooltip(eccWrapper, text) {
       clearTimeout($wrapper.data('timeout'));
       $wrapper.off('mouseenter mouseleave');
       if (eccWrapper.matches(':hover')) $('.tooltip-wrapper').remove();
-      eccWrapper.classList.remove('tooltip');
-      eccWrapper.removeAttribute('data-tooltip');
       eccWrapper._uiapeTooltipBound = false;
     }
     return false;
   }
 
-  if (eccWrapper.getAttribute('data-tooltip') !== text) {
-    eccWrapper.setAttribute('data-tooltip', text);
-    // jQuery caches data-* on first read
-    $wrapper.data('tooltip', text);
-  }
+  // jQuery data only, a .tooltip class also triggers Metrics Monitor's CSS tooltip
+  $wrapper.data('tooltip', text);
   if (!eccWrapper._uiapeTooltipBound) {
     eccWrapper._uiapeTooltipBound = true;
-    eccWrapper.classList.add('tooltip');
     initTooltips(eccWrapper);
   }
   return true;
