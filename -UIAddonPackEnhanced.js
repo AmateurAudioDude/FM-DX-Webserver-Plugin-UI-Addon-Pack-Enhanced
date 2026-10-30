@@ -1,8 +1,8 @@
 // Plugin configuration, this is used in the administration when plugins are loaded
 var pluginConfig = {
     name: 'UI Add-on Pack Enhanced',
-    version: '1.3.1',
-    author: 'AAD',
+    version: '1.3.2',
+    author: 'AAD/MCelliotG',
     frontEndPath: 'UIAddonPackEnhanced/UIAddonPackEnhanced.js'
 }
 

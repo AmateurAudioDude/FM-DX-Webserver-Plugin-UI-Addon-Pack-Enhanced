@@ -1,5 +1,5 @@
 /*
-    UI Add-on Pack Enhanced v1.3.1 by AAD
+    UI Add-on Pack Enhanced v1.3.2 by AAD
     -------------------------------------
     https://github.com/AmateurAudioDude/FM-DX-Webserver-Plugin-UI-Addon-Pack-Enhanced
 */
@@ -26,7 +26,7 @@ function uiapeSearchIncludesDescriptions() {
   }
 }
 
-const pluginVersion = '1.3.1';
+const pluginVersion = '1.3.2';
 const pluginName = "UI Add-on Pack Enhanced";
 const pluginHomepageUrl = "https://github.com/AmateurAudioDude/FM-DX-Webserver-Plugin-UI-Addon-Pack-Enhanced";
 const pluginUpdateUrl = "https://raw.githubusercontent.com/AmateurAudioDude/FM-DX-Webserver-Plugin-UI-Addon-Pack-Enhanced/refs/heads/main/UIAddonPackEnhanced/UIAddonPackEnhanced.js";
@@ -242,6 +242,8 @@ const UIAPE_LIVE_CSS_KEYS = new Set([
   "STEREO_ICON_SCALE",
   "STEREO_ICON_WIDTH",
   "RDS_INDICATOR_ICON_TYPE",
+  "RDS_INDICATOR_ICON_SCALE",
+  "ICONS_CORNER_RADIUS",
   "MULTIPATH_TEXT_SIZE"
 ]);
 
@@ -442,6 +444,9 @@ const UIAPE_DEFAULT_CONFIG = {
   PTY_ICON_GAP: 4,
   ECC_DISPLAY_MODE: "FLAG",
   ECC_INDICATOR_COLOR: "",
+  ECC_FLAG_HEIGHT_MODE: "CUSTOM",
+  ECC_FLAG_HEIGHT: 17,
+  ICONS_CORNER_RADIUS: 3,
   LED_GLOW_EFFECT_ICONS_RDS_ICON_STYLE_ECC_CC: false,
   HORIZONTAL_ICON_SPACING_MODE: "PRESET",
   HORIZONTAL_ICON_SPACING_UNIFORM: 8,
@@ -453,6 +458,7 @@ const UIAPE_DEFAULT_CONFIG = {
 
   RDS_ICON_PRESET: 1,
   RDS_ICON_SCALE: 100,
+  RDS_INDICATOR_ICON_SCALE: 100,
   RDS_ICON_SCALE_AUTO_FIT: true,
   RDS_ICON_SCALE_AUTO_FIT_PADDING: 0,
   RDS_ICON_SCALE_AUTO_FIT_PADDING_MM: -10,
@@ -673,7 +679,7 @@ function uiapeNormalizeConfig(config) {
   merged.ADMIN_ONLY_KEYS_SEEN = reconciledAdminOnly.seen;
 
   // Migrates configs saved before these became plain numeric percentages.
-  ["STEREO_ICON_SCALE", "RDS_ICON_SCALE"].forEach(key => {
+  ["STEREO_ICON_SCALE", "RDS_ICON_SCALE", "RDS_INDICATOR_ICON_SCALE"].forEach(key => {
     if (typeof merged[key] === "string") {
       const parsed = parseFloat(merged[key]);
       merged[key] = Number.isFinite(parsed) ? parsed : UIAPE_DEFAULT_CONFIG[key];
@@ -1047,6 +1053,8 @@ function uiapeAfterConfigChange(key) {
   if (
     key === "ECC_INDICATOR_COLOR_OFF" ||
     key === "ECC_DISPLAY_MODE" ||
+    key === "ECC_FLAG_HEIGHT_MODE" ||
+    key === "ECC_FLAG_HEIGHT" ||
     key === "ECC_INDICATOR_COLOR" ||
     key === "LED_GLOW_EFFECT_ICONS_RDS_ICON_STYLE_ECC_CC"
   ) {
@@ -1497,6 +1505,9 @@ function uiapeBuildLiveCss(cfg) {
         orderedSelectors.add(selector);
       }
     });
+
+    // Core makes the row display:block on phones, which ignores order
+    css += `@media only screen and (max-width: 768px) { .dashboard-panel-plugin-list .scrollable-container { display: flex; gap: 0; } }\n`;
   }
 
   // Mobile-portrait skip mirrors a JS check used elsewhere, keep them matching
@@ -1571,12 +1582,36 @@ function uiapeBuildLiveCss(cfg) {
     }
   }
 
+  const sharedCornerRadius = Math.max(0, Math.min(15, Number(cfg.ICONS_CORNER_RADIUS) || 0));
+  css += `
+#signal-icons #ptyLabel,
+#signal-icons #tpIcon:not(img),
+#signal-icons #taIcon:not(img),
+#signal-icons #ptyIconOverlay,
+#signal-icons #bwLabel,
+#signal-icons #eccWrapper > span:not(.data-flag) {
+  border-radius: ${sharedCornerRadius}px !important;
+}
+#signal-icons #eccWrapper .uiape-ecc-flag-viewport img {
+  border-radius: calc(${sharedCornerRadius}px / var(--uiape-ecc-flag-scale, 1));
+}
+`;
+
   // RDS icon scale located here to decouple from "Metrics icon glow" for Metrics Monitor.
   if (!uiapeIsVisualEqActive(cfg) && window.innerWidth > 360 && parseFloat(cfg.RDS_ICON_SCALE) !== 100) {
     css += `
 #signalPanel > *:where(:not(#uiape-config-gear, #uiape-config-panel)) {
     transform: scale(${uiapeCssScaleValue(cfg.RDS_ICON_SCALE)});
     transform-origin: center;
+}
+`;
+  }
+
+  if (!uiapeIsVisualEqActive(cfg) && window.innerWidth > 360 && cfg.METRICS_MONITOR_PLUGIN_IS_INSTALLED && parseFloat(cfg.RDS_INDICATOR_ICON_SCALE) !== 100) {
+    css += `
+#signal-icons #rdsIcon {
+  transform: scale(${uiapeCssScaleValue(cfg.RDS_INDICATOR_ICON_SCALE, 1)});
+  transform-origin: center;
 }
 `;
   }
@@ -1589,8 +1624,8 @@ function uiapeBuildLiveCss(cfg) {
   ) {
     const rdsPreset = uiapeGetActiveRdsPreset(cfg);
     const stereoCssScale = uiapeCssScaleValue(cfg.STEREO_ICON_SCALE, 1);
+    const rdsIndicatorCssScale = uiapeCssScaleValue(cfg.RDS_INDICATOR_ICON_SCALE, 1);
     const rdsGlowEnabled = !uiapeIsVisualEqActive(cfg) && (cfg.LED_GLOW_EFFECT_ICONS && (cfg.RDS_ICON_STYLE || cfg.LED_GLOW_EFFECT_ICONS_METRICS_MONITOR_PLUGIN));
-    const multipathGlowRgb = uiapeHexToRgb(resolveIconColor(cfg.MULTIPATH_INDICATOR_COLOR, "") || "#FFFFFF");
     const stereoGlowRgb = uiapeHexToRgb(resolveIconColor(cfg.STEREO_ICON_COLOR === "default" ? "" : cfg.STEREO_ICON_COLOR, "") || "#FFFFFF");
 
     css += `
@@ -1650,9 +1685,9 @@ ${cfg.REPLACE_MPX_LOGO_WITH_STEREO_LOGO_METRICS_MONITOR_PLUGIN && cfg.APPLY_STER
 
 /* Multipath icon glow effect */
 #signal-icons .multipath-container.opacity-full .fa-mountain-sun {
-  filter: drop-shadow(0 0 3px rgba(${multipathGlowRgb.r}, ${multipathGlowRgb.g}, ${multipathGlowRgb.b}, 0.6))
-          drop-shadow(0 0 6px rgba(${multipathGlowRgb.r}, ${multipathGlowRgb.g}, ${multipathGlowRgb.b}, 0.4))
-          drop-shadow(0 0 9px rgba(${multipathGlowRgb.r}, ${multipathGlowRgb.g}, ${multipathGlowRgb.b}, 0.3));
+  filter: drop-shadow(0 0 3px color-mix(in srgb, currentColor 60%, transparent))
+          drop-shadow(0 0 6px color-mix(in srgb, currentColor 40%, transparent))
+          drop-shadow(0 0 9px color-mix(in srgb, currentColor 30%, transparent));
 }
 ` : ''}
 
@@ -1732,6 +1767,8 @@ ${cfg.RDS_ICON_STYLE ? `
 #rdsIcon {
   height: ${cfg.RDS_INDICATOR_ICON_TYPE === 1 ? 14 : 18}px !important;
   width: auto !important;
+  transform: scale(${rdsIndicatorCssScale});
+  transform-origin: center;
 }
 ` : ''}
 `;
@@ -2607,20 +2644,51 @@ function uiapeAppendActiveEccContent(eccWrapper, eccPreset, liveCfg, mmInstalled
     (mmInstalled ? Number(liveCfg.ECC_FLAG_SPACING_METRICS_MONITOR) || 0 : 0);
 
   const appendFlag = () => {
-    const flagClone = info.source.cloneNode(true);
-    flagClone.style.marginLeft = eccFlagLeftInset + 'px';
-    flagClone.style.marginRight = displayMode === 'FLAG'
+    const slotWidth = 24;
+    const slotHeight = 17;
+    const requestedHeight = Number(liveCfg.ECC_FLAG_HEIGHT_MODE === 'PTY' ? eccPreset.PTY_HEIGHT : liveCfg.ECC_FLAG_HEIGHT);
+    const flagScale = (Number.isFinite(requestedHeight) ? Math.max(8, Math.min(60, requestedHeight)) : slotHeight) / slotHeight;
+
+    const viewport = document.createElement('span');
+    viewport.className = 'uiape-ecc-flag-viewport';
+    viewport.style.setProperty('--uiape-ecc-flag-scale', String(flagScale));
+    viewport.style.display = 'inline-block';
+    viewport.style.position = 'relative';
+    viewport.style.verticalAlign = 'middle';
+    viewport.style.flexShrink = '0';
+    viewport.style.overflow = 'hidden';
+    viewport.style.width = `${slotWidth * flagScale}px`;
+    viewport.style.height = `${slotHeight * flagScale}px`;
+    viewport.style.marginLeft = eccFlagLeftInset + 'px';
+    viewport.style.marginRight = displayMode === 'FLAG'
       ? (UIAPE_ECC_FLAG_RESERVED_WIDTH - eccFlagLeftInset) + 'px'
       : '3px';
-    flagClone.style.marginTop = '0';
-    flagClone.style.transform = 'translateY(0)';
+
+    const flagClone = info.source.cloneNode(true);
+    flagClone.style.position = 'absolute';
+    flagClone.style.top = '0';
+    flagClone.style.left = '0';
+    flagClone.style.margin = '0';
     flagClone.style.display = 'inline-flex';
     flagClone.style.alignItems = 'center';
     flagClone.style.justifyContent = 'center';
-    flagClone.style.width = '24px';
-    flagClone.style.height = '17px';
-    flagClone.style.lineHeight = '17px';
-    eccWrapper.appendChild(flagClone);
+    flagClone.style.width = `${slotWidth}px`;
+    flagClone.style.height = `${slotHeight}px`;
+    flagClone.style.lineHeight = `${slotHeight}px`;
+    flagClone.style.transformOrigin = 'top left';
+    flagClone.style.transform = `scale(${flagScale})`;
+
+    // Metrics Monitor shifts and clips the pre-v1.4.0c sprite flag for its own layout
+    const flagSprite = flagClone.querySelector('i[class*="flag-sm-"]');
+    if (flagSprite) {
+      flagSprite.style.transform = 'none';
+      flagSprite.style.margin = '0';
+      flagSprite.style.clipPath = 'none';
+      flagSprite.style.borderRadius = '0';
+    }
+
+    viewport.appendChild(flagClone);
+    eccWrapper.appendChild(viewport);
   };
 
   if (displayMode === 'COUNTRY_CODE') {
@@ -4001,8 +4069,8 @@ function createUiapConfigLauncher() {
             ["IS_VISUALEQ_PLUGIN_ENABLED", "checkbox", "VisualEQ enabled", "Enable if VisualEQ plugin is installed."],
 
             [null, "heading", "Layout Settings"],
-            ["RDS_ICON_SCALE", "number", "RDS icon scale", "Size in percentage."],
-            ["RDS_ICON_SCALE_AUTO_FIT", "checkbox", "Auto-fit RDS icon scale", "Shrinks the icon row below the set scale when it is too wide to fit."],
+            ["RDS_ICON_SCALE", "number", "General Scaling", "Scales the complete signal icon panel, existing saved value is preserved."],
+            ["RDS_ICON_SCALE_AUTO_FIT", "checkbox", "Auto-fit General Scaling", "Shrinks the icon row below the General Scaling value when it is too wide to fit."],
             ["RDS_ICON_SCALE_AUTO_FIT_PADDING", "number", "Auto-fit padding", "Pixels kept clear at each end of the icon row. Negative allows it wider."],
             ["RDS_ICON_SCALE_AUTO_FIT_PADDING_MM", "number", "Auto-fit padding (Metrics Monitor)", "Auto-fit padding used when Metrics Monitor owns the icon row."],
             ["HORIZONTAL_ICON_SPACING_MODE", "select", "Horizontal icon spacing", "Preset uses the individual spacing values below. Uniform uses one shared gap. Auto calculates a centered gap from the available row width and keeps the row away from the panel edges.", [["PRESET","Preset"],["UNIFORM","Uniform"],["AUTO","Auto"]]],
@@ -4010,6 +4078,8 @@ function createUiapConfigLauncher() {
             ["HORIZONTAL_ICON_SPACING_AUTO_MIN", "number", "Auto spacing minimum", "Minimum gap in pixels used by Auto mode."],
             ["HORIZONTAL_ICON_SPACING_AUTO_MAX", "number", "Auto spacing maximum", "Maximum gap in pixels used by Auto mode."],
             ["RDS_ICON_PRESET", "select", "RDS icon preset", "0 user, 1 preset 1, 2 preset 2, 3 preset 3.", [["0","User defined"],["1","Preset 1"],["2","Preset 2"],["3","Preset 3"]]],
+
+            ["ICONS_CORNER_RADIUS", "number", "Icons Corner Radius (px)", "Corner radius shared by the Enhanced framed indicators and ECC flag, 0 to 15px (default 3px)."],
 
             [null, "heading", "Stereo / MPX Settings"],
             ["STEREO_ICON_COLOR", "color", "Stereo icon color", "default, auto, or custom #RRGGBB."],
@@ -4020,6 +4090,7 @@ function createUiapConfigLauncher() {
             ["REPLACE_MPX_LOGO_WITH_STEREO_LOGO_METRICS_MONITOR_PLUGIN", "checkbox", "Replace MPX with stereo", "Metrics Monitor compatibility option."],
 
             [null, "heading", "RDS Settings"],
+            ["RDS_INDICATOR_ICON_SCALE", "number", "RDS Icon Scaling", "Independent RDS icon image scaling in percent, 100% retains its original size."],
             ["RDS_INDICATOR_ICON_TYPE", "select", "RDS indicator type", "RDS indicator icon type.", [["1","Type 1"],["2","Type 2"]]],
             ["RDS_INDICATOR_ICON_COLOR", "color", "RDS icon color", "default, auto, or custom #RRGGBB."],
             ["RDS_INDICATOR_ICON_COLOR_OFF", "color", "RDS off color", "default, auto, or custom #RRGGBB."],
@@ -4042,6 +4113,8 @@ function createUiapConfigLauncher() {
             ["RDS_ICON_STYLE_MS_OFF_AS_LETTERS", "checkbox", "MS off as letters", "Uses MS letters for dimmed Music/Speech icons."],
 
             [null, "heading", "ECC Settings"],
+            ["ECC_FLAG_HEIGHT_MODE", "select", "ECC flag height", "Follow the PTY height from the selected icon preset, or set a custom height.", [["PTY", "Follow PTY"], ["CUSTOM", "Custom"]]],
+            ["ECC_FLAG_HEIGHT", "number", "Custom ECC flag height (px)", "Flag height when Custom is selected (8 to 60px, 17px matches the original)."],
             ["ECC_DISPLAY_MODE", "select", "Show ECC as", "Choose how ECC country information is displayed using the webserver's native country flag/ISO code.", [["FLAG","Flag"],["COUNTRY_CODE","Country code"],["FLAG_CC","Flag & country code"]]],
             ["ECC_INDICATOR_COLOR", "color", "ECC active color", "default, auto, or custom #RRGGBB. Applies only to the country-code text and border; the flag is unchanged."],
             ["ECC_INDICATOR_COLOR_OFF", "color", "ECC off color", "default, auto, or custom #RRGGBB. Only affects the fallback label shown when there's no flag to display."],
@@ -4086,6 +4159,7 @@ function createUiapConfigLauncher() {
           RDS_INDICATOR_ICON_GLOW_INTENSITY: 0.05,
           STEREO_ICON_SCALE: 0.5,
           RDS_ICON_SCALE: 0.5,
+          RDS_INDICATOR_ICON_SCALE: 0.5,
           RDS_ICON_SCALE_AUTO_FIT_PADDING: 0.5,
           RDS_ICON_SCALE_AUTO_FIT_PADDING_MM: 0.5
         };
@@ -4665,6 +4739,11 @@ function createUiapConfigLauncher() {
             value = typeof defaultValue === "number" ? Number(field.value) : field.value;
           } else {
             value = field.value;
+          }
+
+          if (key === "ICONS_CORNER_RADIUS") {
+            value = Math.max(0, Math.min(15, value));
+            field.value = String(value);
           }
 
           updateUiapConfig(key, value);

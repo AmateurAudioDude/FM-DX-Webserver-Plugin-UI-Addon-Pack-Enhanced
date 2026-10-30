@@ -15,6 +15,15 @@ A collection of visual enhancements for FM-DX Webserver. Features may be added/r
 
 ###### Includes code and assistance from Highpoint2000 & MCelliotG.
 
+v1.3.2
+------
+* Added "RDS Icon Scaling" setting
+* Added "ECC flag height" setting with `Follow PTY` and `Custom` options
+* Added "Icons Corner Radius" setting, which also supports ECC flag
+* Renamed "RDS icon scale" to "General Scaling"
+* Fixed "Sort plugin buttons" for mobile portrait mode
+* Fixed multipath glow colour not matching the icon color, such as with auto colors
+
 v1.3.1
 ------
 * Fixed compatibility issues with FM-DX Webserver v1.4.0c ECC flags and spacing
